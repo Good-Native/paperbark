@@ -7,8 +7,12 @@ from pathlib import Path
 import pytest
 
 from paperbark.config import (
+    DEFAULT_ANALYSE_EVERY,
+    DEFAULT_INTERVAL,
+    DEFAULT_ITERATIONS,
     Config,
     ConfigError,
+    MonitorConfig,
     PatternOverride,
     ProbesConfig,
     SourceConfig,
@@ -269,3 +273,82 @@ def test_probes_config_is_enabled_rejects_non_probe_attributes() -> None:
     assert not config.is_enabled("keywords")
     assert not config.is_enabled("regexes")
     assert not config.is_enabled("pattern_overrides")
+
+
+# --- monitor ---------------------------------------------------------------
+
+
+def test_monitor_defaults_match_bash_dispatcher() -> None:
+    config = Config.defaults()
+    assert config.monitor == MonitorConfig(
+        interval=DEFAULT_INTERVAL,
+        iterations=DEFAULT_ITERATIONS,
+        analyse_every=DEFAULT_ANALYSE_EVERY,
+        run_id="",
+    )
+    assert config.monitor.interval == 3
+    assert config.monitor.iterations == 1440
+    assert config.monitor.analyse_every == 300
+
+
+def test_from_dict_parses_monitor_section() -> None:
+    config = from_dict(
+        {
+            "monitor": {
+                "interval": 5,
+                "iterations": 720,
+                "analyse_every": "30s",
+                "run_id": "incident-pr349",
+            },
+        }
+    )
+    assert config.monitor == MonitorConfig(
+        interval=5,
+        iterations=720,
+        analyse_every=30,
+        run_id="incident-pr349",
+    )
+
+
+def test_monitor_interval_accepts_duration_string() -> None:
+    config = from_dict({"monitor": {"interval": "5m"}})
+    assert config.monitor.interval == 300
+
+
+def test_monitor_analyse_every_zero_disables_snapshots() -> None:
+    # 0 is the documented sentinel for "no snapshot analysis"; must round-trip.
+    config = from_dict({"monitor": {"analyse_every": 0}})
+    assert config.monitor.analyse_every == 0
+
+
+@pytest.mark.parametrize("bad", [0, -1, "0", "0s", -5])
+def test_monitor_interval_must_be_positive(bad: object) -> None:
+    with pytest.raises(ConfigError, match=r"\[monitor\]\.interval"):
+        from_dict({"monitor": {"interval": bad}})
+
+
+def test_monitor_iterations_rejects_negative() -> None:
+    with pytest.raises(ConfigError, match=r"\[monitor\]\.iterations must be >= 0"):
+        from_dict({"monitor": {"iterations": -1}})
+
+
+def test_monitor_iterations_rejects_bool() -> None:
+    # bool is an int subclass; must not silently round to 0/1.
+    with pytest.raises(ConfigError, match=r"\[monitor\]\.iterations must be an integer"):
+        from_dict({"monitor": {"iterations": True}})
+
+
+def test_monitor_run_id_rejects_path_traversal() -> None:
+    for bad in ("../escape", ".hidden", "-leading-dash", "with/slash", "with space"):
+        with pytest.raises(ConfigError, match=r"\[monitor\]\.run_id"):
+            from_dict({"monitor": {"run_id": bad}})
+
+
+def test_monitor_run_id_accepts_safe_chars() -> None:
+    config = from_dict({"monitor": {"run_id": "incident_2026-05-04.v1"}})
+    assert config.monitor.run_id == "incident_2026-05-04.v1"
+
+
+def test_monitor_section_must_be_table() -> None:
+    with pytest.raises(ConfigError, match=r"\[monitor\] must be a table"):
+        from_dict({"monitor": [1, 2, 3]})
