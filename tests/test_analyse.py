@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -42,8 +42,8 @@ def _build_run(
     return run_dir
 
 
-def _ns(**overrides: object) -> SimpleNamespace:
-    """Build a Namespace-shaped object the analyse runner expects.
+def _ns(**overrides: object) -> argparse.Namespace:
+    """Build the Namespace the analyse runner expects.
 
     Each call gets fresh ``keyword`` / ``regex`` lists so a test that
     appends to them cannot leak state into the next test.
@@ -58,7 +58,7 @@ def _ns(**overrides: object) -> SimpleNamespace:
         "stdout": False,
     }
     defaults.update(overrides)
-    return SimpleNamespace(**defaults)
+    return argparse.Namespace(**defaults)
 
 
 def test_analyse_writes_json_and_md_at_run_root(tmp_path: Path) -> None:
