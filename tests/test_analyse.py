@@ -298,3 +298,30 @@ def test_cli_analyse_repeatable_keyword_flags(tmp_path: Path) -> None:
     labels = {f["label"] for f in adhoc["findings"]}
     assert "keyword:world" in labels
     assert "keyword:bang" in labels
+
+
+def test_cli_analyse_repeatable_regex_flags(tmp_path: Path) -> None:
+    root = tmp_path / "logs"
+    run_dir = _build_run(root)
+
+    rc = main(
+        [
+            "analyse",
+            "--run",
+            "latest",
+            "--root",
+            str(root),
+            "--regex",
+            r"db down",
+            "--regex",
+            r"duration_ms",
+        ]
+    )
+
+    assert rc == 0
+    payload = json.loads((run_dir / "analysis.json").read_text(encoding="utf-8"))
+    assert payload["extra_regexes"] == ["db down", "duration_ms"]
+    adhoc = next(p for p in payload["apps"][0]["probes"] if p["name"] == "Ad-hoc keywords")
+    labels = {f["label"] for f in adhoc["findings"]}
+    assert "regex:db down" in labels
+    assert "regex:duration_ms" in labels
