@@ -87,13 +87,23 @@ def write_starter(path: Path, *, force: bool = False) -> None:
     Refuses to overwrite an existing file unless ``force=True``. Creates parent
     directories as needed. Raises :class:`InitError` for the documented refusal
     cases so the CLI layer can map them to exit codes.
+
+    The non-force path uses exclusive-create (``"x"``) so the existence check
+    and the write are atomic at the OS level — a TOCTOU race where another
+    process creates the file between checks would otherwise let us silently
+    overwrite without ``--force``.
     """
-    if path.exists() and not force:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if force:
+        path.write_text(STARTER_TOML, encoding="utf-8")
+        return
+    try:
+        with path.open("x", encoding="utf-8") as handle:
+            handle.write(STARTER_TOML)
+    except FileExistsError as exc:
         raise InitError(
             f"{path} already exists. Re-run with --force to overwrite.",
-        )
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(STARTER_TOML, encoding="utf-8")
+        ) from exc
 
 
 def run(args: argparse.Namespace) -> int:

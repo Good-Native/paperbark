@@ -1,9 +1,10 @@
 """Paperbark command-line interface.
 
 Argparse front end and dispatch into the real subcommand implementations
-as they land. ``search`` is wired through; ``monitor`` / ``analyse`` /
-``init`` still hit the not-yet-implemented fallback (exit 2) until the
-dispatcher and config layers ship.
+as they land. ``search`` (via :mod:`paperbark.search`) and ``init`` (via
+:mod:`paperbark.init`) are wired through; ``monitor`` and ``analyse``
+still hit the not-yet-implemented fallback (exit 2) until the dispatcher
+lands.
 """
 
 from __future__ import annotations

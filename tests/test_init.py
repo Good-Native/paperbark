@@ -8,16 +8,21 @@ from pathlib import Path
 import pytest
 
 from paperbark.cli import main
-from paperbark.config import Config, from_dict
+from paperbark.config import PROBE_NAMES, Config, from_dict
 from paperbark.init import STARTER_TOML, write_starter
 
 
 def test_starter_round_trips_to_defaults() -> None:
-    """The emitted template parses to ``Config.defaults()`` exactly: no
-    surprise enabled-by-the-template-but-not-by-default settings.
+    """The emitted template parses to ``Config.defaults()`` exactly AND lists
+    every recognised probe key explicitly. The first assertion alone wouldn't
+    catch a silently-omitted probe — ``ProbesConfig`` dataclass defaults fill
+    in any missing key, so equality would still pass — hence the explicit
+    key-coverage check on the raw dict.
     """
-    parsed = from_dict(tomllib.loads(STARTER_TOML))
+    raw = tomllib.loads(STARTER_TOML)
+    parsed = from_dict(raw)
     assert parsed == Config.defaults()
+    assert set(PROBE_NAMES).issubset(raw["probes"])
 
 
 def test_write_starter_creates_file(tmp_path: Path) -> None:
