@@ -1,9 +1,9 @@
 """Paperbark command-line interface.
 
-This is a scaffold. Subcommands print a "not yet implemented" notice and
-exit non-zero so callers (and CI smoke tests) can tell scaffolding apart
-from a real implementation. Wire up real behaviour as the source, format,
-and probe layers land.
+Argparse front end and dispatch into the real subcommand implementations
+as they land. ``search`` is wired through; ``monitor`` / ``analyse`` /
+``init`` still hit the not-yet-implemented fallback (exit 2) until the
+dispatcher and config layers ship.
 """
 
 from __future__ import annotations

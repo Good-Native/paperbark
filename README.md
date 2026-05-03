@@ -7,7 +7,11 @@ CloudWatch, plain files, stdin), runs a configurable set of probes over
 them, and writes a stable run-directory layout that downstream tooling can
 search across.
 
-> Status: pre-alpha. Scaffold only. No releases yet.
+> Status: pre-alpha. The probe, format, source (flyctl), iteration,
+> aggregate, cursor-filter, and search layers are landed; the
+> dispatcher and TOML config that compose them into `paperbark
+> monitor` are in progress. No releases yet — see
+> [docs/ROADMAP.md](docs/ROADMAP.md) for current status.
 
 ## Install
 
@@ -50,12 +54,12 @@ TOML key; flags override TOML at runtime. Full reference will live in
 
 | Source | Status |
 |---|---|
-| Fly.io (`flyctl logs`) | planned for v1 |
-| Cloudflare Workers (`wrangler tail`) | scaffolded, post-v1 |
-| Kubernetes (`kubectl logs`) | scaffolded, post-v1 |
-| AWS CloudWatch | scaffolded, post-v1 |
-| Plain files | scaffolded, post-v1 |
-| stdin | scaffolded, post-v1 |
+| Fly.io (`flyctl logs`) | implemented |
+| Cloudflare Workers (`wrangler tail`) | stub (interface only, post-v1) |
+| Kubernetes (`kubectl logs`) | stub (interface only, post-v1) |
+| AWS CloudWatch | stub (interface only, post-v1) |
+| Plain files | stub (interface only, post-v1) |
+| stdin | stub (interface only, post-v1) |
 
 See `docs/SOURCES.md` (forthcoming) for the `Source` interface and how to
 add a new one.
