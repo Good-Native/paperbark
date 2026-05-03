@@ -18,6 +18,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `reference/filter_since.py`). Strips ANSI prefixes, keeps lines newer than
   a stored cursor, preserves multi-line records when their header is kept,
   and persists the new cursor only when it advances. Eleven unit tests.
+- `paperbark.search`: search subcommand ported from
+  `reference/search_logs.py` (PR #1). `resolve_runs` maps the `--run`
+  selector (``latest`` / ``all`` / date / prefix) to one or more run
+  directories, with fail-closed handling of empty / stripped-empty
+  selectors. `iter_lines` reads both `<app>/raw/*.log` and
+  `<app>/raw.zip` and tolerates corrupt archives or unreadable members
+  with a stderr warning rather than aborting the whole run.
+  `search_runs` prints matches with `[run][app][source]` prefixes and
+  emits per-app/per-run/global counts on stderr. Run-dir discovery is
+  restricted to the canonical `HHMM_*` shape so stray sibling
+  directories don't poison `--run latest`. CLI gains repeatable
+  `--keyword` / `--regex`, `--app` (comma list), `--root`,
+  `--ignore-case` / `--case-sensitive`, `--max`. `cli.main` now
+  dispatches the `search` subcommand (and maps `KeyboardInterrupt` to
+  exit 130); `monitor` / `analyse` / `init` remain stubs. Twenty-seven
+  unit tests.
 - `paperbark.formats`: format layer with `Format` Protocol, configurable
   `JsonKeysFormat` (default Fly-style JSON keys, custom keys for non-Fly
   producers), and `RegexFormat` for named-group line shapes with

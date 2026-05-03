@@ -6,9 +6,32 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 ## Current state
 
 - **Last verified:** 2026-05-03
-- **Latest commit:** `Initial project scaffold and CI` on `main`
+- **Latest commit:** `Merge pull request #1` on `main` (`dcf7792`).
 - **Repo:** <https://github.com/Good-Native/paperbark>
-- **Released:** nothing yet (version stub `0.0.0`)
+- **Released:** nothing yet (version stub `0.0.0`).
+- **Tests:** 141 passing across 15 test modules; CI green on every push
+  since `Land uv.lock and unblock CI`.
+
+### Implementation status
+
+| # | Step | Status |
+|---|---|---|
+| 1 | Port `filter_since.py` → `paperbark.cursor` | ✅ done |
+| 2 | Port `analyse_logs.py` → `paperbark.probes/` | ✅ done |
+| 3 | Port `aggregate_logs.py` → `paperbark.aggregate` | ✅ done |
+| 4 | Port `process_logs.py` → `paperbark.iteration` | ✅ done |
+| 5 | Port `search_logs.py` → `paperbark.search` (wired into CLI) | ✅ done (PR #1) |
+| 6 | Source interface + flyctl source (stubs for the rest) | ✅ done |
+| 7 | Format interface + built-in presets | ✅ done |
+| 8 | Dispatcher and animator (`rich.live`) replacing `logs.sh` | ⏳ next |
+| 9 | `paperbark init` TOML writer | ⏳ pending |
+
+Step 8 is the next blocker for an end-to-end `paperbark monitor` run; it
+also wires the `monitor` subcommand dispatch into `cli.main`. The TOML
+config layer that step 8 will rely on is implicit in the dispatcher
+work — it must read `[probes]` toggles, `[sources]` config, and
+`[formats]` selection — and lands as part of step 8 unless it grows
+large enough to split into its own step.
 
 ### Scaffold (done)
 
@@ -26,16 +49,22 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 
 ### Open operational notes
 
-- **CI status** for the initial-scaffold push was not verified by the
-  session that pushed it. Before starting feature work, run
-  `gh run list --limit 3` and fix anything red.
+- **`tzdata`** is now a hard runtime dep on Windows so
+  `zoneinfo.ZoneInfo("Australia/Melbourne")` resolves without the system
+  zoneinfo database. No-op on Linux/macOS where the OS already ships it.
 - **Remote uses HTTPS**, not SSH — the user's local SSH identity isn't
   registered against the `Good-Native` org. Pushes go via `gh`'s
   credential helper. Optional follow-up: register an SSH key.
 - **Code-of-conduct contact** is a placeholder
   (`conduct@good-native.dev`). Replace before announcing publicly.
-- **`uv.lock`** is not committed yet; will be generated and tracked the
-  first time `uv sync` runs against real dependencies.
+- **Direct-to-main commits before PR #1** never went through the
+  CodeRabbit bot (only the search PR did). The CLI is installed in
+  WSL; running `coderabbit review --type committed --base-commit
+  bf4af64 --config CLAUDE.md` from inside the repo will surface any
+  findings on those seven commits without re-opening retroactive PRs.
+- **Workflow going forward**: branch + PR per step (matches
+  `CONTRIBUTING.md`), so the bot catches issues before they land on
+  `main`.
 
 ## V1 scope
 
@@ -99,18 +128,23 @@ Don't change the shape without a major-version bump (per `CLAUDE.md`).
 
 Suggested ordering, smallest and most-tested first:
 
-1. **Port `filter_since.py`** → `src/paperbark/cursor.py`. Small and
-   correct. Cover with tests against fixtures from `reference/`.
-2. **Port `analyse_logs.py`** → `src/paperbark/probes/`. Split per-probe
-   classes; each behind a TOML toggle.
-3. **Port `aggregate_logs.py`** → `src/paperbark/aggregate.py`.
-4. **Port `process_logs.py`** → `src/paperbark/iteration.py`.
-5. **Port `search_logs.py`** → wire into `paperbark search`.
-6. **Source interface** (`src/paperbark/sources/__init__.py`) plus the
-   flyctl source. Stubs for the others.
-7. **Format interface** plus the built-in presets.
+1. ~~Port `filter_since.py` → `src/paperbark/cursor.py`.~~ Done.
+2. ~~Port `analyse_logs.py` → `src/paperbark/probes/`. Split per-probe
+   classes; each behind a TOML toggle.~~ Done. Per-probe TOML toggles
+   still pending — they land with the config layer in step 8.
+3. ~~Port `aggregate_logs.py` → `src/paperbark/aggregate.py`.~~ Done.
+4. ~~Port `process_logs.py` → `src/paperbark/iteration.py`.~~ Done.
+5. ~~Port `search_logs.py` → wire into `paperbark search`.~~ Done (PR #1).
+6. ~~Source interface (`src/paperbark/sources/__init__.py`) plus the
+   flyctl source. Stubs for the others.~~ Done.
+7. ~~Format interface plus the built-in presets.~~ Done.
 8. **Dispatcher and animator** (`rich.live`) replacing `logs.sh`.
-9. **`paperbark init`** TOML writer.
+   Lands the TOML config loader (`./paperbark.toml` →
+   `~/.config/paperbark/config.toml`), wires `monitor` and `analyse`
+   subcommand dispatch into `cli.main`, and composes
+   source → cursor filter → iteration → aggregate → probes end to end.
+9. **`paperbark init`** TOML writer (template with every key the
+   config layer recognises).
 
 Each step lands behind passing CI. Add a `CHANGELOG.md` entry per
 user-visible change.
