@@ -1,10 +1,10 @@
 """Paperbark command-line interface.
 
-Argparse front end and dispatch into the real subcommand implementations
-as they land. ``search`` (via :mod:`paperbark.search`), ``monitor`` (via
-:mod:`paperbark.dispatcher`), and ``init`` (via :mod:`paperbark.init`)
-are wired through; ``analyse`` still hits the not-yet-implemented
-fallback (exit 2) until the analysis layer ships.
+Argparse front end and dispatch into the real subcommand implementations.
+``search`` (via :mod:`paperbark.search`), ``monitor`` (via
+:mod:`paperbark.dispatcher`), ``analyse`` (via :mod:`paperbark.analyse`),
+and ``init`` (via :mod:`paperbark.init`) are all wired through; the
+``_NOT_IMPLEMENTED_EXIT`` fallback now only catches typos in dispatch.
 """
 
 from __future__ import annotations
@@ -99,10 +99,40 @@ def _build_parser() -> argparse.ArgumentParser:
     analyse.add_argument(
         "--run",
         default="latest",
-        help="Run selector: 'latest', 'all', or a run id.",
+        help="'latest' (default), 'all', a date, or a run dir.",
     )
-    analyse.add_argument("--keyword", help="Optional keyword filter.")
-    analyse.add_argument("--regex", help="Optional regex filter.")
+    analyse.add_argument(
+        "--root",
+        default="logs",
+        help="Logs root directory (default: logs).",
+    )
+    analyse.add_argument(
+        "--app",
+        default="",
+        help="Comma-separated app filter (default: all apps in run).",
+    )
+    analyse.add_argument(
+        "--keyword",
+        action="append",
+        default=[],
+        help="Ad-hoc keyword (repeatable).",
+    )
+    analyse.add_argument(
+        "--regex",
+        action="append",
+        default=[],
+        help="Ad-hoc regex (repeatable).",
+    )
+    analyse.add_argument(
+        "--out",
+        default=None,
+        help="Override output base path; writes <out>.json + <out>.md.",
+    )
+    analyse.add_argument(
+        "--stdout",
+        action="store_true",
+        help="Print the rendered markdown to stdout in addition to writing files.",
+    )
 
     init = subparsers.add_parser(
         "init",
@@ -139,6 +169,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "monitor":
         try:
             return _run_monitor(args)
+        except KeyboardInterrupt:
+            return 130
+
+    if command == "analyse":
+        from paperbark.analyse import run as run_analyse
+
+        try:
+            return run_analyse(args)
         except KeyboardInterrupt:
             return 130
 
