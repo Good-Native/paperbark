@@ -44,12 +44,50 @@ def _build_parser() -> argparse.ArgumentParser:
         "search",
         help="Search across captured runs.",
     )
-    search.add_argument("--keyword", help="Plain-text keyword to match.")
-    search.add_argument("--regex", help="Regular expression to match.")
+    search.add_argument(
+        "--keyword",
+        action="append",
+        default=[],
+        help="Literal substring (repeatable).",
+    )
+    search.add_argument(
+        "--regex",
+        action="append",
+        default=[],
+        help="Regex pattern (repeatable).",
+    )
+    search.add_argument(
+        "--app",
+        default="",
+        help="Comma-separated app filter (default: all apps in run).",
+    )
     search.add_argument(
         "--run",
-        default="latest",
-        help="Run selector: 'latest', 'all', or a run id.",
+        default=None,
+        help="'latest' (default), 'all', a date, or a run dir.",
+    )
+    search.add_argument(
+        "--root",
+        default="logs",
+        help="Logs root directory (default: logs).",
+    )
+    search.add_argument(
+        "-i",
+        "--ignore-case",
+        action="store_true",
+        default=True,
+        help="Match case-insensitively (default: on).",
+    )
+    search.add_argument(
+        "--case-sensitive",
+        action="store_true",
+        help="Force case-sensitive matching (overrides --ignore-case).",
+    )
+    search.add_argument(
+        "--max",
+        type=int,
+        default=0,
+        help="Stop after N total matches (0 = unlimited).",
     )
 
     analyse = subparsers.add_parser(
@@ -77,6 +115,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     command = args.command or "monitor"
+
+    if command == "search":
+        from paperbark.search import run as run_search
+
+        try:
+            return run_search(args)
+        except KeyboardInterrupt:
+            return 130
 
     sys.stderr.write(f"paperbark {__version__}: '{command}' is not yet implemented.\n")
     return _NOT_IMPLEMENTED_EXIT
