@@ -14,3 +14,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   argparse-based CLI skeleton (`monitor`, `search`, `analyse`, `init`),
   smoke test, MIT licence, contributor guide, and Contributor Covenant 2.1
   code of conduct.
+- `paperbark.cursor`: cursor-based dedup filter (port of
+  `reference/filter_since.py`). Strips ANSI prefixes, keeps lines newer than
+  a stored cursor, preserves multi-line records when their header is kept,
+  and persists the new cursor only when it advances. Eleven unit tests.
+
+### Changed
+
+- CI: pin `UV_PYTHON` per matrix entry and pass `--all-extras` to every
+  `uv run` so dev dependencies survive `uv run`'s implicit re-sync.
+- CI: audit the exported requirements file (`uv export --no-emit-project`)
+  rather than the editable install, so `pip-audit --strict` does not fail
+  on the project's own unreleased package.
+- Ruff: exclude `reference/` from lint and format checks; the directory
+  carries pre-port scripts that will be deleted before v0.1.
+
+### Fixed
+
+- CI: commit `uv.lock` so `astral-sh/setup-uv@v3` can resolve its cache
+  dependency glob.

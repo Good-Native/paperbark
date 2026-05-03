@@ -21,6 +21,8 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,30 +33,28 @@ jobs:
           enable-cache: true
 
       - name: Set up Python ${{ matrix.python-version }}
-        env:
-          PY_VERSION: ${{ matrix.python-version }}
-        run: uv python install "$PY_VERSION"
+        run: uv python install "$UV_PYTHON"
 
       - name: Install project
-        env:
-          PY_VERSION: ${{ matrix.python-version }}
-        run: uv sync --all-extras --python "$PY_VERSION"
+        run: uv sync --all-extras
 
       - name: Ruff (lint)
-        run: uv run ruff check .
+        run: uv run --all-extras ruff check .
 
       - name: Ruff (format check)
-        run: uv run ruff format --check .
+        run: uv run --all-extras ruff format --check .
 
       - name: Mypy
-        run: uv run mypy
+        run: uv run --all-extras mypy
 
       - name: Pytest
-        run: uv run pytest
+        run: uv run --all-extras pytest
 
   audit:
     name: pip-audit
     runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: "3.13"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -65,12 +65,12 @@ jobs:
           enable-cache: true
 
       - name: Set up Python
-        run: uv python install 3.13
+        run: uv python install "$UV_PYTHON"
 
       - name: Install project
-        run: uv sync --all-extras --python 3.13
+        run: uv sync --all-extras
 
       - name: pip-audit
         run: |
           uv export --no-emit-project --format requirements-txt > /tmp/requirements.txt
-          uv run pip-audit --strict --requirement /tmp/requirements.txt
+          uv run --all-extras pip-audit --strict --requirement /tmp/requirements.txt
