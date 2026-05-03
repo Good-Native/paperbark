@@ -6,32 +6,32 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 ## Current state
 
 - **Last verified:** 2026-05-03
-- **Latest commit:** `Merge pull request #1` on `main` (`dcf7792`).
+- **Latest commit:** `Merge pull request #6` on `main` (`a940f0e`).
 - **Repo:** <https://github.com/Good-Native/paperbark>
 - **Released:** nothing yet (version stub `0.0.0`).
-- **Tests:** 141 passing across 15 test modules; CI green on every push
+- **Tests:** 215 passing across 17 test modules; CI green on every push
   since `Land uv.lock and unblock CI`.
 
 ### Implementation status
 
-| #   | Step                                                        | Status                                                           |
-| --- | ----------------------------------------------------------- | ---------------------------------------------------------------- |
-| 1   | Port `filter_since.py` → `paperbark.cursor`                 | ✅ done                                                          |
-| 2   | Port `analyse_logs.py` → `paperbark.probes/`                | ✅ done                                                          |
-| 3   | Port `aggregate_logs.py` → `paperbark.aggregate`            | ✅ done                                                          |
-| 4   | Port `process_logs.py` → `paperbark.iteration`              | ✅ done                                                          |
-| 5   | Port `search_logs.py` → `paperbark.search` (wired into CLI) | ✅ done (PR #1)                                                  |
-| 6   | Source interface + flyctl source (stubs for the rest)       | ✅ done                                                          |
-| 7   | Format interface + built-in presets                         | ✅ done                                                          |
-| 8   | Dispatcher and animator (`rich.live`) replacing `logs.sh`   | 🟡 partial — one-shot dispatcher landed; loop + animator pending |
-| 9   | `paperbark init` TOML writer                                | ⏳ pending                                                       |
+| #   | Step                                                        | Status                                                                   |
+| --- | ----------------------------------------------------------- | ------------------------------------------------------------------------ |
+| 1   | Port `filter_since.py` → `paperbark.cursor`                 | ✅ done                                                                  |
+| 2   | Port `analyse_logs.py` → `paperbark.probes/`                | ✅ done                                                                  |
+| 3   | Port `aggregate_logs.py` → `paperbark.aggregate`            | ✅ done                                                                  |
+| 4   | Port `process_logs.py` → `paperbark.iteration`              | ✅ done                                                                  |
+| 5   | Port `search_logs.py` → `paperbark.search` (wired into CLI) | ✅ done (PR #1)                                                          |
+| 6   | Source interface + flyctl source (stubs for the rest)       | ✅ done                                                                  |
+| 7   | Format interface + built-in presets                         | ✅ done                                                                  |
+| 8   | Dispatcher and animator (`rich.live`) replacing `logs.sh`   | 🟡 partial — one-shot dispatcher landed (PR #5); loop + animator pending |
+| 9   | `paperbark init` TOML writer                                | ✅ done (PR #6)                                                          |
+| 10  | Wire `paperbark analyse` over captured runs                 | ✅ done                                                                  |
 
-Step 8 is the next blocker for an end-to-end `paperbark monitor` run; it
-also wires the `monitor` subcommand dispatch into `cli.main`. The TOML
-config layer that step 8 will rely on is implicit in the dispatcher
-work — it must read `[probes]` toggles, `[sources]` config, and
-`[formats]` selection — and lands as part of step 8 unless it grows
-large enough to split into its own step.
+The remaining blocker for an end-to-end live `paperbark monitor` run is
+PR-C of step 8 — the iteration loop plus the `rich.live` ticker that
+turns the current one-shot dispatcher into the long-running command.
+The TOML config layer landed with PR #3 and is already in use by the
+dispatcher and `analyse`.
 
 ### Scaffold (done)
 

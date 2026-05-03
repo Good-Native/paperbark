@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `paperbark.analyse`: `paperbark analyse` is now wired end to end. Replays
+  every captured raw line through `paperbark.probes.parse_line` and the
+  `default_probes()` set, then writes `analysis.json` and `analysis.md`
+  at the run root (or at `--out <base>` when supplied). Reuses
+  `paperbark.search.resolve_runs` and `paperbark.search.iter_lines` for
+  run discovery and capture reading. Carries the reference's bounded LRU
+  dedup window (50,000 lines) as a safety net on top of cursor filtering.
+  CLI flags: `--run`, `--root`, `--app`, repeatable `--keyword` /
+  `--regex`, `--out`, `--stdout` (matches the reference contract).
+  `--run all` writes one report per run; `--run all --out <base>` is
+  rejected with exit 2. `KeyboardInterrupt` → exit 130. Fifteen unit
+  tests covering JSON shape, probe wiring, ad-hoc keyword bucketing,
+  `--out` redirection, multi-run loops, app filter, dedup, and CLI
+  dispatch.
 - `paperbark.dispatcher`: composes source → cursor filter → iteration
   summary → aggregate end to end. `build_source(spec)` and
   `build_sources(config)` resolve `SourceConfig` entries to `Source`
