@@ -80,7 +80,15 @@ def iter_lines(app_dir: Path) -> Iterator[tuple[str, str]]:
                     yield (log.name, line.rstrip("\n"))
     raw_zip = app_dir / "raw.zip"
     if raw_zip.exists():
-        with zipfile.ZipFile(raw_zip) as zf:
+        # Corrupt or truncated archives (e.g. an upstream cleanup killed mid-write)
+        # surface as BadZipFile/OSError on open. Skip with a warning so a single
+        # bad zip doesn't abort the rest of a `--run all` search.
+        try:
+            zf_open = zipfile.ZipFile(raw_zip)
+        except (zipfile.BadZipFile, OSError) as exc:
+            print(f"# skipping unreadable {raw_zip}: {exc}", file=sys.stderr)
+            return
+        with zf_open as zf:
             for info in sorted(zf.infolist(), key=lambda i: i.filename):
                 if info.is_dir() or not info.filename.endswith(".log"):
                     continue

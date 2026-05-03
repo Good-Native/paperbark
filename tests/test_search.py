@@ -76,6 +76,40 @@ def test_iter_lines_raw_zip(fake_logs: Path) -> None:
     assert ("app.1.log", "WARN slow") in lines
 
 
+def test_iter_lines_corrupt_zip_yields_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    app = tmp_path / "app"
+    app.mkdir()
+    (app / "raw.zip").write_bytes(b"not actually a zip file")
+    lines = list(iter_lines(app))
+    err = capsys.readouterr().err
+    assert lines == []
+    assert "skipping unreadable" in err
+    assert "raw.zip" in err
+
+
+def test_search_continues_past_corrupt_zip(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "logs"
+    # Run with corrupt zip
+    bad_app = root / "20260503" / "1430_bad" / "app1"
+    bad_app.mkdir(parents=True)
+    (bad_app / "raw.zip").write_bytes(b"truncated archive")
+    # Later run with valid raw/ content
+    good_log = root / "20260503" / "1500_good" / "app1" / "raw" / "app.1.log"
+    good_log.parent.mkdir(parents=True)
+    good_log.write_text("panic: real match\n", encoding="utf-8")
+
+    rc = main(["search", "--root", str(root), "--run", "all", "--keyword", "panic"])
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "panic: real match" in captured.out
+    assert "skipping unreadable" in captured.err
+    assert "# total matches: 1" in captured.err
+
+
 def test_keyword_escapes_regex_metachars(
     fake_logs: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
