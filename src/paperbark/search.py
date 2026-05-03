@@ -56,6 +56,11 @@ def resolve_runs(run_arg: str | None, root: Path) -> list[Path]:
     if run_arg == "all":
         return runs
     target = run_arg.strip("/")
+    if not target:
+        # ``--run "/"`` (or any value that strips to empty) would otherwise let
+        # every ``rel.startswith(target)`` match — a malformed selector
+        # silently behaving like ``--run all``. Fail closed: no runs matched.
+        return []
     matched: list[Path] = []
     for r in runs:
         rel = str(r.relative_to(root))

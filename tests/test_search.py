@@ -57,6 +57,19 @@ def test_resolve_runs_run_name_prefix(fake_logs: Path) -> None:
     assert [r.name for r in runs] == ["1430_run_a"]
 
 
+def test_resolve_runs_empty_after_strip_returns_empty(
+    fake_logs: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--run /`` (or any value that strips to empty) must fail closed, not
+    silently behave like ``--run all``.
+    """
+    assert resolve_runs("/", fake_logs) == []
+    rc = main(["search", "--root", str(fake_logs), "--run", "/", "--keyword", "panic"])
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "No runs matched" in err
+
+
 def test_resolve_runs_path_prefix(fake_logs: Path) -> None:
     """``<date>/<run-prefix>`` resolves to the run whose relative path begins
     with the selector — the documented "prefix match against <date>/<runname>"
