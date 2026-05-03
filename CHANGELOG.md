@@ -77,6 +77,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `paperbark.search`: normalise run-prefix output and `--run` selector
+  comparison to forward slashes so Windows and POSIX produce identical
+  matched-line prefixes, and a Windows operator passing
+  `20260503\1430` matches the same runs as `20260503/1430`.
+- `paperbark.cli`: refresh module docstring — `search` is now a real
+  dispatch, no longer a pure scaffold.
+- `README.md`: status line now points at `docs/ROADMAP.md` instead of
+  saying "Scaffold only", and the source table reflects landed
+  flyctl + the five remaining stubs.
+
+### Changed (earlier)
+
 - CI: pin `UV_PYTHON` per matrix entry and pass `--all-extras` to every
   `uv run` so dev dependencies survive `uv run`'s implicit re-sync.
 - CI: audit the exported requirements file (`uv export --no-emit-project`)

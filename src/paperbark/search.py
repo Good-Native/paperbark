@@ -55,7 +55,9 @@ def resolve_runs(run_arg: str | None, root: Path) -> list[Path]:
         return [runs[-1]]
     if run_arg == "all":
         return runs
-    target = run_arg.strip("/")
+    # Normalise to forward slashes so a Windows operator passing
+    # ``20260503\1430`` matches the same runs as ``20260503/1430``.
+    target = run_arg.replace("\\", "/").strip("/")
     if not target:
         # ``--run "/"`` (or any value that strips to empty) would otherwise let
         # every ``rel.startswith(target)`` match — a malformed selector
@@ -63,7 +65,7 @@ def resolve_runs(run_arg: str | None, root: Path) -> list[Path]:
         return []
     matched: list[Path] = []
     for r in runs:
-        rel = str(r.relative_to(root))
+        rel = r.relative_to(root).as_posix()
         # Path-prefix match (e.g. "20260503/1430" against "20260503/1430_run_a").
         # No trailing-slash constraint so partial run-name suffixes also match,
         # consistent with the docstring's "prefix match against <date>/<runname>".
@@ -137,7 +139,8 @@ def search_runs(
     stop = False
     for run in runs:
         per_app: dict[str, int] = {}
-        rel_run = run.relative_to(root)
+        # POSIX-form so the prefix renders identically across platforms.
+        rel_run = run.relative_to(root).as_posix()
         for app_dir in _iter_app_dirs(run, app_filter):
             count = 0
             for source, line in iter_lines(app_dir):
