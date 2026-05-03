@@ -56,6 +56,24 @@ def test_resolve_runs_run_name_prefix(fake_logs: Path) -> None:
     assert [r.name for r in runs] == ["1430_run_a"]
 
 
+def test_resolve_runs_excludes_non_hhmm_siblings(tmp_path: Path) -> None:
+    """Sibling dirs that don't match the ``HHMM_*`` contract are skipped, so
+    ``latest`` cannot resolve to a stray ``.tmp`` / partial-cleanup dir.
+    """
+    root = tmp_path / "logs"
+    real = root / "20260503" / "1430_real" / "app1" / "raw"
+    real.mkdir(parents=True)
+    (real / "app.1.log").write_text("ok\n", encoding="utf-8")
+    # Stray non-conforming siblings under the same date dir.
+    (root / "20260503" / ".tmp").mkdir()
+    (root / "20260503" / "scratch").mkdir()
+    (root / "20260503" / "12_short").mkdir()  # too short, missing minute digits
+    (root / "20260503" / "abcd_letters").mkdir()  # non-digit prefix
+
+    runs = resolve_runs("all", root)
+    assert [r.name for r in runs] == ["1430_real"]
+
+
 def test_resolve_runs_no_match_exits_1(fake_logs: Path, capsys: pytest.CaptureFixture[str]) -> None:
     rc = main(["search", "--root", str(fake_logs), "--run", "9999", "--keyword", "x"])
     err = capsys.readouterr().err

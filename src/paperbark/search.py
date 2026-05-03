@@ -28,8 +28,15 @@ def _candidate_run_dirs(root: Path) -> list[Path]:
         if not date_dir.is_dir() or len(date_dir.name) != 8 or not date_dir.name.isdigit():
             continue
         for run in sorted(date_dir.iterdir()):
-            if run.is_dir():
-                out.append(run)
+            if not run.is_dir():
+                continue
+            # Run-dir contract: ``HHMM_<slug>_<settings>`` — require the
+            # leading ``HHMM_`` so stray sibling dirs (e.g. ``.tmp``) don't
+            # poison ``--run latest`` resolution.
+            name = run.name
+            if len(name) < 6 or not name[:4].isdigit() or name[4] != "_":
+                continue
+            out.append(run)
     return out
 
 
