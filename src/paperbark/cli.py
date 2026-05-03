@@ -1,9 +1,10 @@
 """Paperbark command-line interface.
 
 Argparse front end and dispatch into the real subcommand implementations
-as they land. ``search`` and ``monitor`` are wired through; ``analyse``
-and ``init`` still hit the not-yet-implemented fallback (exit 2) until
-those layers ship.
+as they land. ``search`` (via :mod:`paperbark.search`), ``monitor`` (via
+:mod:`paperbark.dispatcher`), and ``init`` (via :mod:`paperbark.init`)
+are wired through; ``analyse`` still hits the not-yet-implemented
+fallback (exit 2) until the analysis layer ships.
 """
 
 from __future__ import annotations
@@ -103,9 +104,19 @@ def _build_parser() -> argparse.ArgumentParser:
     analyse.add_argument("--keyword", help="Optional keyword filter.")
     analyse.add_argument("--regex", help="Optional regex filter.")
 
-    subparsers.add_parser(
+    init = subparsers.add_parser(
         "init",
         help="Write a starter paperbark.toml in the current directory.",
+    )
+    init.add_argument(
+        "--path",
+        default="paperbark.toml",
+        help="Output path (default: paperbark.toml).",
+    )
+    init.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite the output file if it already exists.",
     )
 
     return parser
@@ -130,6 +141,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _run_monitor(args)
         except KeyboardInterrupt:
             return 130
+
+    if command == "init":
+        from paperbark.init import run as run_init
+
+        return run_init(args)
 
     sys.stderr.write(f"paperbark {__version__}: '{command}' is not yet implemented.\n")
     return _NOT_IMPLEMENTED_EXIT
