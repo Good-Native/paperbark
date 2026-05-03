@@ -91,8 +91,28 @@ def test_build_sources_preserves_order_and_names() -> None:
 def test_new_run_dir_creates_layout_under_root(tmp_path: Path) -> None:
     fixed = datetime(2026, 5, 3, 14, 30)
     run_dir = new_run_dir(tmp_path / "logs", now=fixed)
-    assert run_dir == tmp_path / "logs" / "20260503" / "1430"
+    # Default slug "run" — required so search.resolve_runs can discover the dir.
+    assert run_dir == tmp_path / "logs" / "20260503" / "1430_run"
     assert run_dir.is_dir()
+
+
+def test_new_run_dir_uses_supplied_slug(tmp_path: Path) -> None:
+    fixed = datetime(2026, 5, 3, 14, 30)
+    run_dir = new_run_dir(tmp_path, slug="api_worker", now=fixed)
+    assert run_dir.name == "1430_api_worker"
+
+
+def test_new_run_dir_sanitises_unsafe_slug_chars(tmp_path: Path) -> None:
+    fixed = datetime(2026, 5, 3, 14, 30)
+    run_dir = new_run_dir(tmp_path, slug="hello world / friend", now=fixed)
+    # Spaces and slashes become hyphens; consecutive separators preserved as-is.
+    assert run_dir.name == "1430_hello-world---friend"
+
+
+def test_new_run_dir_falls_back_when_slug_is_empty(tmp_path: Path) -> None:
+    fixed = datetime(2026, 5, 3, 14, 30)
+    run_dir = new_run_dir(tmp_path, slug="", now=fixed)
+    assert run_dir.name == "1430_run"
 
 
 def test_new_run_dir_is_idempotent(tmp_path: Path) -> None:
@@ -181,7 +201,7 @@ def test_run_iteration_creates_per_app_dirs_and_aggregates(tmp_path: Path) -> No
         ("api", _FakeSource(_scripted_lines())),
         ("worker", _FakeSource(_scripted_lines())),
     ]
-    run_dir = tmp_path / "20260503" / "1430"
+    run_dir = tmp_path / "20260503" / "1430_test"
     run_dir.mkdir(parents=True)
     run_iteration(sources, run_dir, iteration=1, now=fixed)
     for app in ("api", "worker"):
@@ -208,11 +228,37 @@ def test_run_monitor_returns_run_dir_path(tmp_path: Path) -> None:
         built_sources=[("api", _FakeSource(_scripted_lines()))],
         now=fixed,
     )
-    assert run_dir == tmp_path / "logs" / "20260503" / "1430"
+    # Slug derived from source name, matching the public run-dir contract.
+    assert run_dir == tmp_path / "logs" / "20260503" / "1430_api"
     assert (run_dir / "api" / "summary.md").exists()
+
+
+def test_run_monitor_derives_slug_from_multiple_source_names(tmp_path: Path) -> None:
+    fixed = datetime(2026, 5, 3, 14, 30, 45, tzinfo=UTC)
+    config = Config(root=tmp_path / "logs")
+    run_dir = run_monitor(
+        config,
+        built_sources=[
+            ("api", _FakeSource(_scripted_lines())),
+            ("worker", _FakeSource(_scripted_lines())),
+        ],
+        now=fixed,
+    )
+    assert run_dir.name == "1430_api_worker"
 
 
 def test_run_monitor_raises_when_no_sources_configured(tmp_path: Path) -> None:
     config = Config(root=tmp_path)
     with pytest.raises(DispatcherError, match="no sources configured"):
         run_monitor(config)
+
+
+def test_run_monitor_raises_when_built_sources_is_empty(tmp_path: Path) -> None:
+    # Explicit empty injection bypasses the config.sources path; the post-resolution
+    # guard must still fail closed rather than silently creating an empty run dir.
+    config = Config(
+        root=tmp_path / "logs",
+        sources=(SourceConfig(name="api", type="flyctl", options={"app": "fly-a"}),),
+    )
+    with pytest.raises(DispatcherError, match="no sources configured"):
+        run_monitor(config, built_sources=[])

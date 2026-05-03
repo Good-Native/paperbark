@@ -25,6 +25,7 @@ the ``rich.live`` ticker land in a follow-up PR.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -82,16 +83,37 @@ def build_sources(config: Config) -> list[tuple[str, Source]]:
     return [(spec.name, build_source(spec)) for spec in config.sources]
 
 
-def new_run_dir(root: Path, *, now: datetime | None = None) -> Path:
+_SLUG_REPLACE = re.compile(r"[^a-zA-Z0-9_-]")
+_DEFAULT_SLUG = "run"
+
+
+def _safe_slug(name: str) -> str:
+    """Sanitise a source name into a path-safe slug component."""
+    cleaned = _SLUG_REPLACE.sub("-", name).strip("-")
+    return cleaned or _DEFAULT_SLUG
+
+
+def new_run_dir(
+    root: Path,
+    *,
+    slug: str = _DEFAULT_SLUG,
+    now: datetime | None = None,
+) -> Path:
     """Create and return a fresh run directory under ``root``.
 
-    Layout: ``<root>/<YYYYMMDD>/<HHMM>``. ``now`` is injectable for tests
-    so the path is deterministic.
+    Layout: ``<root>/<YYYYMMDD>/<HHMM>_<slug>`` per the public run-dir
+    contract in ``CLAUDE.md`` (``HHMM_<slug>_<settings>``; v1 leaves the
+    ``<settings>`` half empty). The leading ``HHMM_`` form is required —
+    ``paperbark.search.resolve_runs`` filters discovery to directories
+    matching exactly that shape, so a bare ``HHMM`` would be invisible.
+
+    ``now`` is injectable for tests so the path is deterministic.
     """
     moment = now if now is not None else datetime.now()
     date_part = moment.strftime("%Y%m%d")
     time_part = moment.strftime("%H%M")
-    run_dir = root / date_part / time_part
+    safe = _safe_slug(slug)
+    run_dir = root / date_part / f"{time_part}_{safe}"
     run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir
 
@@ -168,13 +190,16 @@ def run_monitor(
     """Top-level entry: create a run dir, build sources, run one iteration.
 
     ``built_sources`` lets tests bypass :func:`build_sources` and inject
-    pre-built fakes. Returns the run-dir path so callers can print it.
+    pre-built fakes. The empty-source guard runs after resolution so an
+    explicitly empty injection is rejected the same way an empty config
+    would be. Returns the run-dir path so callers can print it.
     """
-    if not config.sources and built_sources is None:
+    sources = built_sources if built_sources is not None else build_sources(config)
+    if not sources:
         raise DispatcherError(
             "no sources configured; add at least one [[sources]] entry to paperbark.toml"
         )
-    sources = built_sources if built_sources is not None else build_sources(config)
-    run_dir = new_run_dir(config.root, now=now)
+    slug = "_".join(_safe_slug(name) for name, _ in sources)
+    run_dir = new_run_dir(config.root, slug=slug, now=now)
     run_iteration(sources, run_dir, iteration=1, now=now)
     return run_dir
