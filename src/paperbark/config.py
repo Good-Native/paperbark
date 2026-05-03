@@ -91,8 +91,15 @@ class ProbesConfig:
     pattern_overrides: dict[str, tuple[PatternOverride, ...]] = field(default_factory=dict)
 
     def is_enabled(self, name: str) -> bool:
-        """Return ``True`` if the named probe is enabled."""
-        return bool(getattr(self, name, False))
+        """Return ``True`` if the named probe is enabled.
+
+        Only names listed in :data:`PROBE_NAMES` count — passing an unrelated
+        attribute (``keywords``, ``regexes``, …) returns ``False`` rather than
+        leaking the truthiness of the underlying value.
+        """
+        if name not in PROBE_NAMES:
+            return False
+        return bool(getattr(self, name))
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,7 +157,10 @@ def discover(*, cwd: Path | None = None) -> Path | None:
         Path.home() / ".config" / "paperbark" / "config.toml",
     ]
     for candidate in candidates:
-        if candidate.exists():
+        # ``is_file()`` instead of ``exists()`` so a directory named
+        # ``paperbark.toml`` (an easy mistake) doesn't win discovery and mask
+        # a valid home config sitting behind it.
+        if candidate.is_file():
             return candidate
     return None
 

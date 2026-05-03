@@ -95,6 +95,19 @@ def test_discover_returns_none_when_nothing_present(
     assert discover(cwd=tmp_path / "no-cwd") is None
 
 
+def test_discover_skips_directory_with_config_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A directory named `paperbark.toml` in cwd should not mask the home config.
+    home = tmp_path / "home"
+    home_config = home / ".config" / "paperbark" / "config.toml"
+    _write(home_config, "")
+    cwd = tmp_path / "cwd"
+    (cwd / "paperbark.toml").mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", lambda: home)
+    assert discover(cwd=cwd) == home_config
+
+
 def test_from_dict_parses_minimal_config() -> None:
     config = from_dict({})
     assert config == Config.defaults()
@@ -239,3 +252,12 @@ app = "fly-app-a"
 
 def test_probes_config_is_enabled_returns_false_for_unknown() -> None:
     assert not ProbesConfig().is_enabled("not-a-real-probe")
+
+
+def test_probes_config_is_enabled_rejects_non_probe_attributes() -> None:
+    # `keywords` is a real attribute on ProbesConfig but it's not a probe flag,
+    # so its truthiness must not leak through is_enabled.
+    config = ProbesConfig(keywords=("panic",))
+    assert not config.is_enabled("keywords")
+    assert not config.is_enabled("regexes")
+    assert not config.is_enabled("pattern_overrides")
