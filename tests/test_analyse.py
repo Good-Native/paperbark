@@ -182,6 +182,10 @@ def test_analyse_run_all_with_out_returns_two(
     assert rc == 2
     captured = capsys.readouterr()
     assert "--out requires a single run" in captured.err
+    # The guard must fire before any per-run write; an artefact left
+    # behind would hint at output-overwriting between runs.
+    assert not (tmp_path / "report.json").exists()
+    assert not (tmp_path / "report.md").exists()
 
 
 def test_analyse_no_runs_matched_returns_one(
