@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -53,6 +54,15 @@ def test_resolve_runs_date_prefix(fake_logs: Path) -> None:
 
 def test_resolve_runs_run_name_prefix(fake_logs: Path) -> None:
     runs = resolve_runs("1430", fake_logs)
+    assert [r.name for r in runs] == ["1430_run_a"]
+
+
+def test_resolve_runs_path_prefix(fake_logs: Path) -> None:
+    """``<date>/<run-prefix>`` resolves to the run whose relative path begins
+    with the selector — the documented "prefix match against <date>/<runname>"
+    contract. ``os.sep`` keeps the test cross-platform.
+    """
+    runs = resolve_runs(f"20260503{os.sep}1430", fake_logs)
     assert [r.name for r in runs] == ["1430_run_a"]
 
 

@@ -59,7 +59,10 @@ def resolve_runs(run_arg: str | None, root: Path) -> list[Path]:
     matched: list[Path] = []
     for r in runs:
         rel = str(r.relative_to(root))
-        if rel == target or rel.startswith(target + "/"):
+        # Path-prefix match (e.g. "20260503/1430" against "20260503/1430_run_a").
+        # No trailing-slash constraint so partial run-name suffixes also match,
+        # consistent with the docstring's "prefix match against <date>/<runname>".
+        if rel == target or rel.startswith(target):
             matched.append(r)
             continue
         if r.parent.name == target or r.name == target or r.name.startswith(target):
