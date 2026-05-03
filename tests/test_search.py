@@ -89,6 +89,25 @@ def test_iter_lines_corrupt_zip_yields_nothing(
     assert "raw.zip" in err
 
 
+def test_iter_lines_reads_both_raw_dir_and_raw_zip(tmp_path: Path) -> None:
+    """Lock in the verbatim reference contract: when an app dir contains BOTH
+    ``raw/`` and ``raw.zip`` (e.g. a partial cleanup), iter_lines surfaces lines
+    from each. Changing this to a precedence rule would be a behaviour change.
+    """
+    app = tmp_path / "app"
+    raw_dir = app / "raw"
+    raw_dir.mkdir(parents=True)
+    (raw_dir / "live.log").write_text("LIVE marker\n", encoding="utf-8")
+    with zipfile.ZipFile(app / "raw.zip", "w") as zf:
+        zf.writestr("archived.log", "ARCHIVED marker\n")
+
+    sources = {source for source, _ in iter_lines(app)}
+    lines = {line for _, line in iter_lines(app)}
+    assert sources == {"live.log", "archived.log"}
+    assert "LIVE marker" in lines
+    assert "ARCHIVED marker" in lines
+
+
 def test_search_continues_past_corrupt_zip(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
