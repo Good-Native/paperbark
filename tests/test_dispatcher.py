@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import random
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,8 +17,10 @@ from paperbark.dispatcher import (
     build_sources,
     capture_iteration,
     new_run_dir,
+    random_slug,
     run_iteration,
     run_monitor,
+    settings_suffix,
 )
 from paperbark.sources import (
     CloudWatchSource,
@@ -83,6 +86,68 @@ def test_build_sources_preserves_order_and_names() -> None:
     )
     built = build_sources(config)
     assert [name for name, _ in built] == ["first", "second"]
+
+
+# --- random_slug -----------------------------------------------------------
+
+
+def test_random_slug_is_adjective_colour_form() -> None:
+    slug = random_slug(rng=random.Random(42))
+    assert slug.count("-") == 1
+    adjective, colour = slug.split("-")
+    assert adjective.isalpha() and colour.isalpha()
+
+
+def test_random_slug_is_deterministic_with_seeded_rng() -> None:
+    # Same seed → same slug. Tests downstream of `random_slug` rely on this to
+    # avoid flaky string assertions.
+    a = random_slug(rng=random.Random(123))
+    b = random_slug(rng=random.Random(123))
+    assert a == b
+
+
+def test_random_slug_default_rng_runs_without_args() -> None:
+    # Smoke check: no-arg form picks an OS-seeded RNG and returns a valid slug.
+    slug = random_slug()
+    assert slug.count("-") == 1
+
+
+# --- settings_suffix -------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "interval, iterations, expected",
+    [
+        # Bash defaults: 3s × 1440 = 4320s; (4320+1800)//3600 = 1 → "1h".
+        (3, 1440, "3s_1h"),
+        (3, 0, "3s_forever"),
+        # < 3600: minute branch with round-half-up via +30 nudge.
+        (3, 300, "3s_15m"),
+        (3, 600, "3s_30m"),
+        (3, 1100, "3s_55m"),  # 3300s → 55m exact
+        (60, 30, "1m_30m"),
+        # >= 3600 boundary: hour branch.
+        (3, 1200, "3s_1h"),  # 3600s → 1h exact
+        (5, 720, "5s_1h"),
+        (3, 3600, "3s_3h"),  # 10 800s → 3h exact
+        # >= 86400: day branch.
+        (60, 60 * 24, "1m_1d"),  # 86 400s → 1d exact
+        (3600, 24, "60m_1d"),
+        (3, 60 * 60 * 24, "3s_3d"),  # 3s × 86 400 = 259 200s = 3 days exact
+    ],
+)
+def test_settings_suffix_matches_bash(interval: int, iterations: int, expected: str) -> None:
+    assert settings_suffix(interval, iterations) == expected
+
+
+def test_settings_suffix_rejects_non_positive_interval() -> None:
+    with pytest.raises(ValueError, match="interval must be > 0"):
+        settings_suffix(0, 100)
+
+
+def test_settings_suffix_rejects_negative_iterations() -> None:
+    with pytest.raises(ValueError, match="iterations must be >= 0"):
+        settings_suffix(3, -1)
 
 
 # --- new_run_dir -----------------------------------------------------------

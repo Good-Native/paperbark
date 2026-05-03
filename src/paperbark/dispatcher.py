@@ -25,6 +25,7 @@ the ``rich.live`` ticker land in a follow-up PR.
 from __future__ import annotations
 
 import json
+import random
 import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -43,6 +44,23 @@ from paperbark.sources import (
     StdinSource,
     WranglerSource,
 )
+
+# Adjective-colour slug pools mirror reference/logs.sh so concurrent runs are
+# easy to distinguish at a glance. Keep these in lockstep with the bash list;
+# regenerating an existing run from logs would otherwise read as a different
+# slug under the Python port than under the original bash dispatcher.
+_SLUG_ADJECTIVES: tuple[str, ...] = (
+    "grumpy", "happy", "lazy", "quick", "brave", "silent", "loud", "sleepy",
+    "hungry", "tiny", "spicy", "mellow", "plucky", "witty", "bright", "stormy",
+    "frosty", "sunny", "rusty", "merry", "gentle", "clumsy", "chatty", "curious",
+    "eager", "fancy", "giddy", "nimble", "proud", "sturdy",
+)  # fmt: skip
+_SLUG_COLOURS: tuple[str, ...] = (
+    "orange", "purple", "sky", "river", "panda", "cobra", "falcon", "meadow",
+    "ember", "hazel", "crimson", "teal", "indigo", "amber", "slate", "olive",
+    "rose", "mint", "coral", "cobalt", "ivory", "ochre", "azure", "plum",
+    "lilac", "mango", "onyx", "pearl", "sage", "saffron",
+)  # fmt: skip
 
 
 class DispatcherError(ValueError):
@@ -91,6 +109,45 @@ def _safe_slug(name: str) -> str:
     """Sanitise a source name into a path-safe slug component."""
     cleaned = _SLUG_REPLACE.sub("-", name).strip("-")
     return cleaned or _DEFAULT_SLUG
+
+
+def random_slug(*, rng: random.Random | None = None) -> str:
+    """Return a fresh ``<adjective>-<colour>`` slug for a run.
+
+    The ``rng`` parameter is the test seam — pass a ``random.Random(seed)`` to
+    get a deterministic slug. With no argument we instantiate a non-seeded
+    :class:`random.Random`, which draws from the OS entropy pool.
+    """
+    r = rng if rng is not None else random.Random()
+    return f"{r.choice(_SLUG_ADJECTIVES)}-{r.choice(_SLUG_COLOURS)}"
+
+
+def settings_suffix(interval_seconds: int, iterations: int) -> str:
+    """Build the ``<settings>`` half of the run-dir name.
+
+    Mirrors the suffix logic in ``reference/logs.sh``: ``<interval>_<duration>``,
+    where ``interval`` is ``Ns`` under a minute and ``Nm`` otherwise, and
+    ``duration`` is rounded to the nearest unit (minutes / hours / days). When
+    ``iterations`` is 0 the suffix is ``<interval>_forever``.
+    """
+    if interval_seconds <= 0:
+        raise ValueError(f"interval must be > 0, got {interval_seconds}")
+    if iterations < 0:
+        raise ValueError(f"iterations must be >= 0, got {iterations}")
+    interval_str = (
+        f"{interval_seconds // 60}m" if interval_seconds >= 60 else f"{interval_seconds}s"
+    )
+    if iterations == 0:
+        return f"{interval_str}_forever"
+    duration = interval_seconds * iterations
+    if duration >= 86400:
+        # Round-half-up per the bash implementation: `(x + half) // unit`.
+        duration_str = f"{(duration + 43200) // 86400}d"
+    elif duration >= 3600:
+        duration_str = f"{(duration + 1800) // 3600}h"
+    else:
+        duration_str = f"{(duration + 30) // 60}m"
+    return f"{interval_str}_{duration_str}"
 
 
 def new_run_dir(
