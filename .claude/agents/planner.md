@@ -1,7 +1,6 @@
 ---
 name: planner
-description:
-  Use proactively to break work into a risk-aware implementation plan.
+description: Use proactively to break work into a risk-aware implementation plan.
 tools:
   - read
   - grep

@@ -87,7 +87,7 @@ guaranteed for at least one source (Fly's `--no-tail`).
   mandatory pre-merge gates.
 - Pre-commit hooks (`ruff`, `ruff format`, `prettier` for md/yaml/json)
   run on every commit; CI enforces the same set with `pre-commit run
-  --all-files`.
+--all-files`.
 - If a change risks failing a gate, call it out before implementation.
 - Do not recommend or request bypasses unless explicitly approved by
   project maintainers.
@@ -102,7 +102,7 @@ file.
 ## Commit style
 
 - 5–6 words, descriptive, present tense. Examples: `Add severity probe
-  toggle`, `Fix cursor filter timezone`, `Port aggregate logs to Python`.
+toggle`, `Fix cursor filter timezone`, `Port aggregate logs to Python`.
 - No AI-attribution footers (`Co-Authored-By: Claude`, `Generated with`,
   etc.).
 - Group related work into single commits where reasonable; avoid chains

@@ -14,17 +14,17 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 
 ### Implementation status
 
-| # | Step | Status |
-|---|---|---|
-| 1 | Port `filter_since.py` → `paperbark.cursor` | ✅ done |
-| 2 | Port `analyse_logs.py` → `paperbark.probes/` | ✅ done |
-| 3 | Port `aggregate_logs.py` → `paperbark.aggregate` | ✅ done |
-| 4 | Port `process_logs.py` → `paperbark.iteration` | ✅ done |
-| 5 | Port `search_logs.py` → `paperbark.search` (wired into CLI) | ✅ done (PR #1) |
-| 6 | Source interface + flyctl source (stubs for the rest) | ✅ done |
-| 7 | Format interface + built-in presets | ✅ done |
-| 8 | Dispatcher and animator (`rich.live`) replacing `logs.sh` | ⏳ next |
-| 9 | `paperbark init` TOML writer | ⏳ pending |
+| #   | Step                                                        | Status          |
+| --- | ----------------------------------------------------------- | --------------- |
+| 1   | Port `filter_since.py` → `paperbark.cursor`                 | ✅ done         |
+| 2   | Port `analyse_logs.py` → `paperbark.probes/`                | ✅ done         |
+| 3   | Port `aggregate_logs.py` → `paperbark.aggregate`            | ✅ done         |
+| 4   | Port `process_logs.py` → `paperbark.iteration`              | ✅ done         |
+| 5   | Port `search_logs.py` → `paperbark.search` (wired into CLI) | ✅ done (PR #1) |
+| 6   | Source interface + flyctl source (stubs for the rest)       | ✅ done         |
+| 7   | Format interface + built-in presets                         | ✅ done         |
+| 8   | Dispatcher and animator (`rich.live`) replacing `logs.sh`   | ⏳ next         |
+| 9   | `paperbark init` TOML writer                                | ⏳ pending      |
 
 Step 8 is the next blocker for an end-to-end `paperbark monitor` run; it
 also wires the `monitor` subcommand dispatch into `cli.main`. The TOML
@@ -60,7 +60,7 @@ large enough to split into its own step.
 - **Direct-to-main commits before PR #1** never went through the
   CodeRabbit bot (only the search PR did). The CLI is installed in
   WSL; running `coderabbit review --type committed --base-commit
-  bf4af64 --config CLAUDE.md` from inside the repo will surface any
+bf4af64 --config CLAUDE.md` from inside the repo will surface any
   findings on those seven commits without re-opening retroactive PRs.
 - **Workflow going forward**: branch + PR per step (matches
   `CONTRIBUTING.md`), so the bot catches issues before they land on
@@ -154,17 +154,17 @@ user-visible change.
 Originals live in `reference/` (also in
 `~/Documents/GitHub/hover/scripts/`, MIT-licensed).
 
-| File | Action |
-|---|---|
-| `analyse_logs.py` | Port directly; well-tested |
-| `filter_since.py` | Port directly; small and correct |
-| `aggregate_logs.py` | Port directly |
-| `process_logs.py` | Port directly |
-| `search_logs.py` | Port directly |
-| `logs.sh` dispatcher | Rebuild as `argparse` + `rich.live` |
-| Bash banner / kv printing | Rebuild with `rich.table` / `rich.panel` |
+| File                       | Action                                                   |
+| -------------------------- | -------------------------------------------------------- |
+| `analyse_logs.py`          | Port directly; well-tested                               |
+| `filter_since.py`          | Port directly; small and correct                         |
+| `aggregate_logs.py`        | Port directly                                            |
+| `process_logs.py`          | Port directly                                            |
+| `search_logs.py`           | Port directly                                            |
+| `logs.sh` dispatcher       | Rebuild as `argparse` + `rich.live`                      |
+| Bash banner / kv printing  | Rebuild with `rich.table` / `rich.panel`                 |
 | Background ticker animator | Rebuild with `threading.Thread` driving `rich.live.Live` |
-| Capture loop | Rebuild with `subprocess.Popen` + `concurrent.futures` |
+| Capture loop               | Rebuild with `subprocess.Popen` + `concurrent.futures`   |
 
 Delete `reference/` once v0.1 ships.
 
@@ -205,12 +205,12 @@ Carry these into the Python port:
 
 ## Naming and registries
 
-| Surface | Name | Status |
-|---|---|---|
-| GitHub | `Good-Native/paperbark` | created, public |
-| npm | `@good-native/paperbark` | scope reserved, package free |
-| PyPI | `paperbark` | free, not yet reserved |
-| Homebrew | `paperbark` | free, not yet reserved |
+| Surface  | Name                     | Status                       |
+| -------- | ------------------------ | ---------------------------- |
+| GitHub   | `Good-Native/paperbark`  | created, public              |
+| npm      | `@good-native/paperbark` | scope reserved, package free |
+| PyPI     | `paperbark`              | free, not yet reserved       |
+| Homebrew | `paperbark`              | free, not yet reserved       |
 
 Reserve PyPI before the first release; reserve Homebrew when a formula
 is ready.

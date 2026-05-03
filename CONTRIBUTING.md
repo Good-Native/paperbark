@@ -41,7 +41,7 @@ uv run ruff format .
 - Branch off `main`. Use short descriptive names: `feature/severity-probe`,
   `fix/cursor-timezone`.
 - Commit messages: 5–6 words, present tense. Examples: `Add severity
-  probe toggle`, `Fix cursor filter timezone`. No AI-attribution footers.
+probe toggle`, `Fix cursor filter timezone`. No AI-attribution footers.
 - Group related work into single commits where reasonable.
 - Use Australian English in code, comments, commit messages, and docs.
 

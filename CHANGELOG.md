@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and persists the new cursor only when it advances. Eleven unit tests.
 - `paperbark.search`: search subcommand ported from
   `reference/search_logs.py` (PR #1). `resolve_runs` maps the `--run`
-  selector (``latest`` / ``all`` / date / prefix) to one or more run
+  selector (`latest` / `all` / date / prefix) to one or more run
   directories, with fail-closed handling of empty / stripped-empty
   selectors. `iter_lines` reads both `<app>/raw/*.log` and
   `<app>/raw.zip` and tolerates corrupt archives or unreadable members
@@ -44,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   extraction, and each preset against canonical example lines.
 - `paperbark.sources`: source layer with `Source` Protocol and registry.
   Real implementation for `flyctl` (subprocess wrapping `flyctl logs
-  --no-tail`); injectable runner for testability. Stubs for `wrangler`,
+--no-tail`); injectable runner for testability. Stubs for `wrangler`,
   `kubectl`, `cloudwatch`, `file`, `stdin` — each conforms to the
   Protocol and raises `NotImplementedError` on `capture()`. Twelve unit
   tests.
