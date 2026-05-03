@@ -14,17 +14,17 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 
 ### Implementation status
 
-| #   | Step                                                        | Status          |
-| --- | ----------------------------------------------------------- | --------------- |
-| 1   | Port `filter_since.py` → `paperbark.cursor`                 | ✅ done         |
-| 2   | Port `analyse_logs.py` → `paperbark.probes/`                | ✅ done         |
-| 3   | Port `aggregate_logs.py` → `paperbark.aggregate`            | ✅ done         |
-| 4   | Port `process_logs.py` → `paperbark.iteration`              | ✅ done         |
-| 5   | Port `search_logs.py` → `paperbark.search` (wired into CLI) | ✅ done (PR #1) |
-| 6   | Source interface + flyctl source (stubs for the rest)       | ✅ done         |
-| 7   | Format interface + built-in presets                         | ✅ done         |
-| 8   | Dispatcher and animator (`rich.live`) replacing `logs.sh`   | ⏳ next         |
-| 9   | `paperbark init` TOML writer                                | ⏳ pending      |
+| #   | Step                                                        | Status                                                           |
+| --- | ----------------------------------------------------------- | ---------------------------------------------------------------- |
+| 1   | Port `filter_since.py` → `paperbark.cursor`                 | ✅ done                                                          |
+| 2   | Port `analyse_logs.py` → `paperbark.probes/`                | ✅ done                                                          |
+| 3   | Port `aggregate_logs.py` → `paperbark.aggregate`            | ✅ done                                                          |
+| 4   | Port `process_logs.py` → `paperbark.iteration`              | ✅ done                                                          |
+| 5   | Port `search_logs.py` → `paperbark.search` (wired into CLI) | ✅ done (PR #1)                                                  |
+| 6   | Source interface + flyctl source (stubs for the rest)       | ✅ done                                                          |
+| 7   | Format interface + built-in presets                         | ✅ done                                                          |
+| 8   | Dispatcher and animator (`rich.live`) replacing `logs.sh`   | 🟡 partial — one-shot dispatcher landed; loop + animator pending |
+| 9   | `paperbark init` TOML writer                                | ⏳ pending                                                       |
 
 Step 8 is the next blocker for an end-to-end `paperbark monitor` run; it
 also wires the `monitor` subcommand dispatch into `cli.main`. The TOML

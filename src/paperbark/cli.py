@@ -1,9 +1,9 @@
 """Paperbark command-line interface.
 
 Argparse front end and dispatch into the real subcommand implementations
-as they land. ``search`` is wired through; ``monitor`` / ``analyse`` /
-``init`` still hit the not-yet-implemented fallback (exit 2) until the
-dispatcher and config layers ship.
+as they land. ``search`` and ``monitor`` are wired through; ``analyse``
+and ``init`` still hit the not-yet-implemented fallback (exit 2) until
+those layers ship.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from paperbark import __version__
 
@@ -124,8 +125,44 @@ def main(argv: Sequence[str] | None = None) -> int:
         except KeyboardInterrupt:
             return 130
 
+    if command == "monitor":
+        try:
+            return _run_monitor(args)
+        except KeyboardInterrupt:
+            return 130
+
     sys.stderr.write(f"paperbark {__version__}: '{command}' is not yet implemented.\n")
     return _NOT_IMPLEMENTED_EXIT
+
+
+def _run_monitor(args: argparse.Namespace) -> int:
+    """Glue between ``cli`` argparse and the dispatcher.
+
+    Loads the TOML config (explicit ``--config`` or discovery), runs one
+    iteration, and prints the resulting run directory. Errors from the
+    config and dispatcher layers surface as exit 2 with a single-line
+    stderr message.
+    """
+    from paperbark.config import ConfigError, load
+    from paperbark.dispatcher import DispatcherError, run_monitor
+
+    # When the user invokes plain `paperbark` (no subcommand), the
+    # `monitor` subparser hasn't run, so attributes like `config` aren't
+    # on the namespace. Treat that case as "no overrides, use defaults".
+    config_arg = getattr(args, "config", None)
+    config_path = Path(config_arg) if config_arg else None
+    try:
+        config = load(config_path)
+    except ConfigError as exc:
+        sys.stderr.write(f"config error: {exc}\n")
+        return 2
+    try:
+        run_dir = run_monitor(config)
+    except DispatcherError as exc:
+        sys.stderr.write(f"monitor error: {exc}\n")
+        return 2
+    sys.stdout.write(f"run: {run_dir}\n")
+    return 0
 
 
 if __name__ == "__main__":  # pragma: no cover
