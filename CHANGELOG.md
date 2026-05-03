@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `reference/filter_since.py`). Strips ANSI prefixes, keeps lines newer than
   a stored cursor, preserves multi-line records when their header is kept,
   and persists the new cursor only when it advances. Eleven unit tests.
+- `paperbark.iteration`: per-iteration log processor ported from
+  `reference/process_logs.py`. `summarise_lines(iter)` is pure (no I/O,
+  feeds optional flat-row sink); `summarise_log_file(raw_path)` adds
+  the file plumbing and optional flat-CSV side-output. Output shape is
+  the contract `paperbark.aggregate.merge_iteration` consumes — verified
+  by a round-trip test. Thirteen unit tests.
 - `paperbark.aggregate`: time-series rollup ported from
   `reference/aggregate_logs.py`. `merge_iteration` is pure (input
   payload + state in, mutated state out); `aggregate(run_dir)` orchestrates
