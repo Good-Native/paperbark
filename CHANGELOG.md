@@ -18,6 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `reference/filter_since.py`). Strips ANSI prefixes, keeps lines newer than
   a stored cursor, preserves multi-line records when their header is kept,
   and persists the new cursor only when it advances. Eleven unit tests.
+- `paperbark.aggregate`: time-series rollup ported from
+  `reference/aggregate_logs.py`. `merge_iteration` is pure (input
+  payload + state in, mutated state out); `aggregate(run_dir)` orchestrates
+  fingerprinted incremental ingestion (mtime+size), atomic state save via
+  `.aggregate_data.json`, and the four CSV / markdown outputs (time
+  series, events per minute, components per minute, summary). Detects
+  rewritten files (same name, new fingerprint) and forces a cold rebuild
+  rather than double-counting. Sixteen unit tests.
+- Runtime dependency on `tzdata` for Windows targets so
+  `zoneinfo.ZoneInfo("Australia/Melbourne")` resolves without a system
+  zoneinfo database.
 - `paperbark.probes`: probe layer ported from `reference/analyse_logs.py`.
   Adds `CanonicalRecord` plus a `parse_line` mapper (the format-layer
   boundary), a `Bucket` accumulator, and nine probe classes one file each:
