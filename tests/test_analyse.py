@@ -293,11 +293,14 @@ def test_cli_analyse_repeatable_keyword_flags(tmp_path: Path) -> None:
 
     assert rc == 0
     payload = json.loads((run_dir / "analysis.json").read_text(encoding="utf-8"))
+    # ``extra_keywords`` is the substantive flag-order assertion: argparse
+    # ``action="append"`` must preserve the ``--keyword`` order verbatim.
     assert payload["extra_keywords"] == ["world", "bang"]
     adhoc = next(p for p in payload["apps"][0]["probes"] if p["name"] == "Ad-hoc keywords")
-    labels = {f["label"] for f in adhoc["findings"]}
-    assert "keyword:world" in labels
-    assert "keyword:bang" in labels
+    # Findings are sorted by count desc with stable insertion-order tiebreak;
+    # both keywords match exactly once in the fixture, so flag order wins.
+    labels = [f["label"] for f in adhoc["findings"]]
+    assert labels == ["keyword:world", "keyword:bang"]
 
 
 def test_cli_analyse_repeatable_regex_flags(tmp_path: Path) -> None:
@@ -320,8 +323,11 @@ def test_cli_analyse_repeatable_regex_flags(tmp_path: Path) -> None:
 
     assert rc == 0
     payload = json.loads((run_dir / "analysis.json").read_text(encoding="utf-8"))
+    # As above: ``extra_regexes`` proves the argparse-preserved flag order.
     assert payload["extra_regexes"] == ["db down", "duration_ms"]
     adhoc = next(p for p in payload["apps"][0]["probes"] if p["name"] == "Ad-hoc keywords")
-    labels = {f["label"] for f in adhoc["findings"]}
-    assert "regex:db down" in labels
-    assert "regex:duration_ms" in labels
+    # Findings sort by count desc: ``duration_ms`` matches twice in the
+    # fixture (two HTTP records), ``db down`` once, so the count-sorted
+    # order inverts the flag order. This pins probe behaviour explicitly.
+    labels = [f["label"] for f in adhoc["findings"]]
+    assert labels == ["regex:duration_ms", "regex:db down"]
