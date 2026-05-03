@@ -18,6 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `reference/filter_since.py`). Strips ANSI prefixes, keeps lines newer than
   a stored cursor, preserves multi-line records when their header is kept,
   and persists the new cursor only when it advances. Eleven unit tests.
+- `paperbark.formats`: format layer with `Format` Protocol, configurable
+  `JsonKeysFormat` (default Fly-style JSON keys, custom keys for non-Fly
+  producers), and `RegexFormat` for named-group line shapes with
+  optional `strptime` timestamps. Three presets bundled:
+  `apache-combined`, `nginx-default`, `syslog-rfc5424` (the syslog
+  preset derives level from RFC 5424 priority severity). Thirteen unit
+  tests covering protocol conformance, custom keys, named-group
+  extraction, and each preset against canonical example lines.
 - `paperbark.sources`: source layer with `Source` Protocol and registry.
   Real implementation for `flyctl` (subprocess wrapping `flyctl logs
   --no-tail`); injectable runner for testability. Stubs for `wrangler`,
