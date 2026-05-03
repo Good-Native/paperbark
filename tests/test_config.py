@@ -54,6 +54,20 @@ def test_load_raises_on_invalid_toml(tmp_path: Path) -> None:
         load(path)
 
 
+def test_load_rejects_directory_as_path(tmp_path: Path) -> None:
+    # If a path resolves to a directory we should fail closed via ConfigError
+    # rather than letting a raw OSError escape from open().
+    directory = tmp_path / "paperbark.toml"
+    directory.mkdir()
+    with pytest.raises(ConfigError, match="not found"):
+        load(directory)
+
+
+def test_from_dict_rejects_non_string_root() -> None:
+    with pytest.raises(ConfigError, match=r"\[paperbark\]\.root must be a string"):
+        from_dict({"paperbark": {"root": 123}})
+
+
 def test_discover_prefers_cwd_over_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     home = tmp_path / "home"
     home_config = home / ".config" / "paperbark" / "config.toml"

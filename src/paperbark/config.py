@@ -128,11 +128,15 @@ def load(path: Path | None = None, *, cwd: Path | None = None) -> Config:
     target = path if path is not None else discover(cwd=cwd)
     if target is None:
         return Config.defaults()
-    if not target.exists():
+    if not target.exists() or not target.is_file():
+        # Catches the directory-as-path case, dangling symlinks, and the rare
+        # race where a file is removed between discover() and open().
         raise ConfigError(f"config file not found: {target}")
     try:
         with target.open("rb") as f:
             raw = tomllib.load(f)
+    except OSError as exc:
+        raise ConfigError(f"unable to read config file {target}: {exc}") from exc
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"invalid TOML in {target}: {exc}") from exc
     return from_dict(raw)
@@ -154,9 +158,11 @@ def discover(*, cwd: Path | None = None) -> Path | None:
 def from_dict(raw: Mapping[str, Any]) -> Config:
     """Build a :class:`Config` from a raw parsed-TOML mapping."""
     paperbark = _expect_mapping(raw.get("paperbark"), "paperbark")
-    root = Path(str(paperbark.get("root", DEFAULT_ROOT)))
+    root_raw = paperbark.get("root", DEFAULT_ROOT)
+    if not isinstance(root_raw, str):
+        raise ConfigError(f"[paperbark].root must be a string, got {type(root_raw).__name__}")
     return Config(
-        root=root,
+        root=Path(root_raw),
         sources=_parse_sources(raw.get("sources")),
         probes=_parse_probes(raw.get("probes")),
     )
