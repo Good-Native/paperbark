@@ -68,6 +68,14 @@ def test_from_dict_rejects_non_string_root() -> None:
         from_dict({"paperbark": {"root": 123}})
 
 
+def test_from_dict_rejects_non_mapping_root() -> None:
+    # Programmatic callers passing a list / scalar should hit ConfigError, not
+    # AttributeError — keeping the validation contract typed.
+    for bad in ([1, 2, 3], "string", 42, None):
+        with pytest.raises(ConfigError, match="config root must be a table"):
+            from_dict(bad)  # type: ignore[arg-type]
+
+
 def test_discover_prefers_cwd_over_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     home = tmp_path / "home"
     home_config = home / ".config" / "paperbark" / "config.toml"

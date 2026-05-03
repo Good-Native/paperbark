@@ -166,7 +166,15 @@ def discover(*, cwd: Path | None = None) -> Path | None:
 
 
 def from_dict(raw: Mapping[str, Any]) -> Config:
-    """Build a :class:`Config` from a raw parsed-TOML mapping."""
+    """Build a :class:`Config` from a raw parsed-TOML mapping.
+
+    ``tomllib.load`` always returns a dict, so this top-level guard mainly
+    catches programmatic callers that hand in a non-mapping (e.g. a list or
+    a scalar). Without it the first ``raw.get`` would raise ``AttributeError``
+    rather than the project's typed :class:`ConfigError`.
+    """
+    if not isinstance(raw, Mapping):
+        raise ConfigError(f"config root must be a table, got {type(raw).__name__}")
     paperbark = _expect_mapping(raw.get("paperbark"), "paperbark")
     root_raw = paperbark.get("root", DEFAULT_ROOT)
     if not isinstance(root_raw, str):
