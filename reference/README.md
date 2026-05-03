@@ -10,16 +10,16 @@ ships and these are no longer needed.**
 
 ## What's here
 
-| File | Role | Port plan |
-|---|---|---|
-| `logs.sh` | Bash dispatcher: monitor / search / analyse subcommands | **Rebuild** in pure Python (`argparse` + `rich.live` ticker) |
-| `monitor_logs.sh` | Legacy thin wrapper that forwards to `logs.sh monitor` | Drop |
-| `filter_since.py` | Cursor filter — drops lines older than the saved per-app timestamp | Port directly |
-| `process_logs.py` | Raw log → per-iteration JSON summary | Port directly |
-| `aggregate_logs.py` | Iteration JSONs → per-minute time series | Port directly |
-| `analyse_logs.py` | Raw + aggregated → probe report (`analysis.md`/`json`) | Port mostly as-is; lift hardcoded keys + regex sets into TOML config |
-| `search_logs.py` | Grep across captured raw logs (live or zipped) | Port directly |
-| `monitor-command.md` | The Hover Claude Code slash-command that documents `logs.sh` usage | Reference for the new `paperbark` CLI help text and quickstart |
+| File                 | Role                                                               | Port plan                                                            |
+| -------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `logs.sh`            | Bash dispatcher: monitor / search / analyse subcommands            | **Rebuild** in pure Python (`argparse` + `rich.live` ticker)         |
+| `monitor_logs.sh`    | Legacy thin wrapper that forwards to `logs.sh monitor`             | Drop                                                                 |
+| `filter_since.py`    | Cursor filter — drops lines older than the saved per-app timestamp | Port directly                                                        |
+| `process_logs.py`    | Raw log → per-iteration JSON summary                               | Port directly                                                        |
+| `aggregate_logs.py`  | Iteration JSONs → per-minute time series                           | Port directly                                                        |
+| `analyse_logs.py`    | Raw + aggregated → probe report (`analysis.md`/`json`)             | Port mostly as-is; lift hardcoded keys + regex sets into TOML config |
+| `search_logs.py`     | Grep across captured raw logs (live or zipped)                     | Port directly                                                        |
+| `monitor-command.md` | The Hover Claude Code slash-command that documents `logs.sh` usage | Reference for the new `paperbark` CLI help text and quickstart       |
 
 ## Provenance
 

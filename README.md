@@ -10,7 +10,7 @@ search across.
 > Status: pre-alpha. The probe, format, source (flyctl), iteration,
 > aggregate, cursor-filter, and search layers are landed; the
 > dispatcher and TOML config that compose them into `paperbark
-> monitor` are in progress. No releases yet — see
+monitor` are in progress. No releases yet — see
 > [docs/ROADMAP.md](docs/ROADMAP.md) for current status.
 
 ## Install
@@ -52,14 +52,14 @@ TOML key; flags override TOML at runtime. Full reference will live in
 
 ## Sources
 
-| Source | Status |
-|---|---|
-| Fly.io (`flyctl logs`) | implemented |
+| Source                               | Status                         |
+| ------------------------------------ | ------------------------------ |
+| Fly.io (`flyctl logs`)               | implemented                    |
 | Cloudflare Workers (`wrangler tail`) | stub (interface only, post-v1) |
-| Kubernetes (`kubectl logs`) | stub (interface only, post-v1) |
-| AWS CloudWatch | stub (interface only, post-v1) |
-| Plain files | stub (interface only, post-v1) |
-| stdin | stub (interface only, post-v1) |
+| Kubernetes (`kubectl logs`)          | stub (interface only, post-v1) |
+| AWS CloudWatch                       | stub (interface only, post-v1) |
+| Plain files                          | stub (interface only, post-v1) |
+| stdin                                | stub (interface only, post-v1) |
 
 See `docs/SOURCES.md` (forthcoming) for the `Source` interface and how to
 add a new one.

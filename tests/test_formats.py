@@ -61,8 +61,7 @@ def test_regex_format_with_named_groups() -> None:
     fmt = RegexFormat(
         "demo",
         re.compile(
-            r"^(?P<timestamp>\S+)\s+(?P<level>\w+)\s+(?P<component>\w+):"
-            r"\s+(?P<message>.*)$"
+            r"^(?P<timestamp>\S+)\s+(?P<level>\w+)\s+(?P<component>\w+):" r"\s+(?P<message>.*)$"
         ),
     )
     record = fmt.parse("2026-05-03T02:00:01Z error api: it broke\n")
