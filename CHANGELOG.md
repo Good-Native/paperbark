@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `reference/filter_since.py`). Strips ANSI prefixes, keeps lines newer than
   a stored cursor, preserves multi-line records when their header is kept,
   and persists the new cursor only when it advances. Eleven unit tests.
+- `paperbark.sources`: source layer with `Source` Protocol and registry.
+  Real implementation for `flyctl` (subprocess wrapping `flyctl logs
+  --no-tail`); injectable runner for testability. Stubs for `wrangler`,
+  `kubectl`, `cloudwatch`, `file`, `stdin` — each conforms to the
+  Protocol and raises `NotImplementedError` on `capture()`. Twelve unit
+  tests.
 - `paperbark.iteration`: per-iteration log processor ported from
   `reference/process_logs.py`. `summarise_lines(iter)` is pure (no I/O,
   feeds optional flat-row sink); `summarise_log_file(raw_path)` adds
