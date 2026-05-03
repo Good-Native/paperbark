@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import zipfile
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -340,3 +341,48 @@ def test_summary_to_stderr(fake_logs: Path, capsys: pytest.CaptureFixture[str]) 
     assert rc == 0
     assert "# total matches: 1" in err
     assert "app1: 1 match(es)" in err
+
+
+def test_iter_lines_skips_corrupt_zip_member(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One corrupted entry inside an otherwise-readable archive is skipped with
+    a warning; sibling entries still yield their lines.
+    """
+    app = tmp_path / "app"
+    app.mkdir()
+    raw_zip = app / "raw.zip"
+    with zipfile.ZipFile(raw_zip, "w") as zf:
+        zf.writestr("good.log", "good line\n")
+        zf.writestr("bad.log", "bad line\n")
+
+    real_open = zipfile.ZipFile.open
+
+    def fake_open(self: zipfile.ZipFile, name: Any, *args: Any, **kwargs: Any) -> Any:
+        member_name = name.filename if hasattr(name, "filename") else name
+        if member_name == "bad.log":
+            raise zipfile.BadZipFile("simulated CRC failure")
+        return real_open(self, name, *args, **kwargs)
+
+    monkeypatch.setattr(zipfile.ZipFile, "open", fake_open)
+    lines = list(iter_lines(app))
+    err = capsys.readouterr().err
+    sources = [name for name, _ in lines]
+    assert "good.log" in sources
+    assert "bad.log" not in sources
+    assert "skipping unreadable member" in err
+    assert "bad.log" in err
+
+
+def test_keyboard_interrupt_exits_130(monkeypatch: pytest.MonkeyPatch) -> None:
+    """SIGINT during a search returns exit code 130 (the documented contract)."""
+    import paperbark.search as search_mod
+
+    def _boom(_args: object) -> int:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(search_mod, "run", _boom)
+    rc = main(["search", "--keyword", "panic"])
+    assert rc == 130

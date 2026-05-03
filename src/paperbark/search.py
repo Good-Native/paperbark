@@ -92,12 +92,22 @@ def iter_lines(app_dir: Path) -> Iterator[tuple[str, str]]:
             for info in sorted(zf.infolist(), key=lambda i: i.filename):
                 if info.is_dir() or not info.filename.endswith(".log"):
                     continue
-                with zf.open(info) as f:
-                    for raw_line in f:
-                        yield (
-                            Path(info.filename).name,
-                            raw_line.decode("utf-8", errors="ignore").rstrip("\n"),
-                        )
+                # Per-member CRC validation can fail mid-read on a corrupted entry
+                # even when the central directory opened fine. Skip the entry and
+                # carry on so one bad member doesn't abort the rest of the archive.
+                try:
+                    with zf.open(info) as f:
+                        for raw_line in f:
+                            yield (
+                                Path(info.filename).name,
+                                raw_line.decode("utf-8", errors="ignore").rstrip("\n"),
+                            )
+                except (zipfile.BadZipFile, OSError) as exc:
+                    print(
+                        f"# skipping unreadable member {raw_zip}:{info.filename}: {exc}",
+                        file=sys.stderr,
+                    )
+                    continue
 
 
 def search_runs(
