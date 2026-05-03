@@ -78,9 +78,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     command = args.command or "monitor"
 
-    sys.stderr.write(
-        f"paperbark {__version__}: '{command}' is not yet implemented.\n"
-    )
+    sys.stderr.write(f"paperbark {__version__}: '{command}' is not yet implemented.\n")
     return _NOT_IMPLEMENTED_EXIT
 
 

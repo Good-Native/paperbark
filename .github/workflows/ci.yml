@@ -71,4 +71,6 @@ jobs:
         run: uv sync --all-extras --python 3.13
 
       - name: pip-audit
-        run: uv run pip-audit --strict
+        run: |
+          uv export --no-emit-project --format requirements-txt > /tmp/requirements.txt
+          uv run pip-audit --strict --requirement /tmp/requirements.txt

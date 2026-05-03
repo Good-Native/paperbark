@@ -94,3 +94,6 @@ dmypy.json
 
 # Paperbark runtime output
 logs/
+
+# Claude Code agent worktrees
+.claude/worktrees/
