@@ -125,5 +125,5 @@ For detailed rules and onboarding, build out (or maintain):
 
 The probe set, cursor filter, aggregator, and run-dir layout are ported
 from `scripts/` in `Good-Native/hover` (MIT-licensed). The bash dispatcher
-and animator are rebuilt rather than ported. See `HANDOVER.md` (during
-bootstrap) or git history for the migration map.
+and animator are rebuilt rather than ported. See `docs/ROADMAP.md` for
+the migration map and v1 plan.
