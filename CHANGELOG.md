@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `paperbark.dispatcher`: composes source → cursor filter → iteration
+  summary → aggregate end to end. `build_source(spec)` and
+  `build_sources(config)` resolve `SourceConfig` entries to `Source`
+  instances (real `flyctl`, stubs for the rest); `new_run_dir(root)`
+  creates `<root>/<YYYYMMDD>/<HHMM>/`; `capture_iteration(...)` runs one
+  capture, dedupes against `<app>/.cursor`, writes the raw log and the
+  iteration JSON; `run_iteration(...)` coordinates across every built
+  source and refreshes per-app aggregate output; `run_monitor(config)`
+  is the top-level one-iteration entry. Twenty unit tests; injectable
+  clock and source-list keep all paths deterministic.
+- `cli.main` now dispatches the `monitor` subcommand. Loads the TOML
+  config (explicit `--config` or discovery), runs one iteration, and
+  prints the run directory. `ConfigError` and `DispatcherError` surface
+  as exit 2 with a single-line stderr message; `KeyboardInterrupt` →
+  exit 130. Iteration loop and `rich.live` ticker land in the next PR.
 - Initial project scaffold: `pyproject.toml` (hatchling, ruff, pytest, mypy),
   pre-commit configuration, GitHub Actions CI matrix on Python 3.11/3.12/3.13,
   argparse-based CLI skeleton (`monitor`, `search`, `analyse`, `init`),
