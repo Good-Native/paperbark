@@ -42,6 +42,8 @@ def _extract_toml_blocks(text: str) -> list[str]:
             continue
         if in_block:
             buf.append(line)
+    if in_block:
+        raise AssertionError("unterminated ```toml fenced block in docs/CONFIG.md")
     return blocks
 
 

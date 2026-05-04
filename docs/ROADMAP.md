@@ -11,7 +11,7 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
   source-of-truth `docs/CONFIG.md`.
 - **Repo:** <https://github.com/Good-Native/paperbark>
 - **Released:** nothing yet (version stub `0.0.0`).
-- **Tests:** 350 passing across 24 test modules; CI has been green on
+- **Tests:** 361 passing across 25 test modules; CI has been green on
   every push since the `Land uv.lock and unblock CI` change.
 
 ### Implementation status
@@ -208,8 +208,8 @@ Carry these into the Python port:
 - Cross-run search and aggregation queries.
 - Optional alert sinks (Slack, PagerDuty).
 - Homebrew formula and PyPI release automation.
-- `docs/SOURCES.md`, `docs/PROBES.md`, `docs/CONFIG.md` — currently
-  referenced from `README.md` and `CLAUDE.md` but not yet written.
+- `docs/SOURCES.md`, `docs/PROBES.md` — referenced from `README.md`
+  and pending completion before release prep.
 
 ## Naming and registries
 

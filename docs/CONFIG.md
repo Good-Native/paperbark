@@ -208,7 +208,7 @@ The shape below is part of the public contract; downstream tooling
 (search across runs, etc.) depends on it. Don't change it without bumping
 a major version.
 
-```
+```text
 <root>/YYYYMMDD/HHMM_<slug>_<settings>/
 ├── <app>/raw/*.log         # cursor-filtered captures
 ├── <app>/.cursor           # last-seen ISO timestamp
