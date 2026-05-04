@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `paperbark.config`: new `[analyse]` and `[search]` tables. `AnalyseConfig`
+  and `SearchConfig` carry every CLI flag of their respective subcommands as
+  TOML keys (`run`, `app`, `keywords`, `regexes`, `out`, `stdout` for
+  analyse; `run`, `app`, `keywords`, `regexes`, `case_sensitive`, `max` for
+  search). CLI flags override TOML values at runtime; `--root` overrides
+  `[paperbark].root`. The `paperbark init` starter template documents both
+  sections at their default values, and a TOML-supplied `[search].keywords`
+  now drives matching with no `--keyword` flag required (previously search
+  exited 2 in that scenario). Search `--max` validation matches the TOML
+  loader (`>= 0`; `0` = unlimited). Twenty-eight new unit tests across
+  `tests/test_config.py`, `tests/test_cli_analyse.py`,
+  `tests/test_cli_search.py`.
+- Repository-wide `.gitattributes` (LF normalisation) so prettier and ruff
+  don't rewrite every text file on Windows checkouts.
 - `paperbark monitor` is now long-running. The dispatcher's
   `run_monitor_loop` repeats `run_iteration` on a fixed cadence until the
   iteration cap is reached or the user interrupts; SIGINT flips a

@@ -23,6 +23,22 @@ Schema overview::
     analyse_every = "5m"      # 0 = disabled
     run_id = ""               # empty = auto-generated <adjective>-<colour> slug
 
+    [analyse]
+    run = "latest"            # "latest" | "all" | "<date>" | "<date>/<runname>"
+    app = ""                  # comma-separated filter; empty = all apps
+    keywords = []             # ad-hoc literal terms
+    regexes = []              # ad-hoc regex terms
+    out = ""                  # empty = write <run>/analysis.{json,md}
+    stdout = false            # also print rendered markdown to stdout
+
+    [search]
+    run = "latest"            # same selector grammar as [analyse].run
+    app = ""                  # comma-separated filter; empty = all apps
+    keywords = []             # at least one keyword/regex required at run time
+    regexes = []
+    case_sensitive = false    # default off; CLI --case-sensitive overrides
+    max = 0                   # 0 = unlimited matches
+
     [probes]
     severity = true
     panics = true
@@ -150,6 +166,45 @@ class SourceConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class AnalyseConfig:
+    """Defaults for ``paperbark analyse``.
+
+    Mirrors the per-invocation CLI surface so every flag is also a TOML key
+    per :file:`CLAUDE.md`. ``run`` is a selector string parsed at use-time by
+    :func:`paperbark.search.resolve_runs`; the loader only checks shape, not
+    semantics. ``out = ""`` means "write the default
+    ``<run>/analysis.{md,json}``"; the empty-string sentinel keeps the
+    dataclass values pure-data (no ``None``) and round-trippable through TOML.
+    """
+
+    run: str = "latest"
+    app: str = ""
+    keywords: tuple[str, ...] = ()
+    regexes: tuple[str, ...] = ()
+    out: str = ""
+    stdout: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class SearchConfig:
+    """Defaults for ``paperbark search``.
+
+    ``case_sensitive`` is the canonical TOML key. The legacy CLI flag
+    ``--ignore-case`` is documentation-only (already on by default); the
+    inversion lives in :mod:`paperbark.search` and stays out of the typed
+    config. ``max = 0`` is the documented sentinel for "unlimited matches"
+    and matches the bash dispatcher's behaviour.
+    """
+
+    run: str = "latest"
+    app: str = ""
+    keywords: tuple[str, ...] = ()
+    regexes: tuple[str, ...] = ()
+    case_sensitive: bool = False
+    max: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class MonitorConfig:
     """Cadence, scope, and identity settings for ``paperbark monitor``.
 
@@ -173,6 +228,8 @@ class Config:
     sources: tuple[SourceConfig, ...] = ()
     probes: ProbesConfig = field(default_factory=ProbesConfig)
     monitor: MonitorConfig = field(default_factory=MonitorConfig)
+    analyse: AnalyseConfig = field(default_factory=AnalyseConfig)
+    search: SearchConfig = field(default_factory=SearchConfig)
 
     @classmethod
     def defaults(cls) -> Config:
@@ -239,6 +296,8 @@ def from_dict(raw: Mapping[str, Any]) -> Config:
         sources=_parse_sources(raw.get("sources")),
         probes=_parse_probes(raw.get("probes")),
         monitor=_parse_monitor(raw.get("monitor")),
+        analyse=_parse_analyse(raw.get("analyse")),
+        search=_parse_search(raw.get("search")),
     )
 
 
@@ -342,6 +401,51 @@ def _parse_monitor(raw: Any) -> MonitorConfig:
         analyse_every=analyse_every,
         run_id=run_id_raw,
     )
+
+
+def _parse_analyse(raw: Any) -> AnalyseConfig:
+    table = _expect_mapping(raw, "analyse")
+    return AnalyseConfig(
+        run=_parse_string_field(table.get("run", "latest"), "[analyse].run"),
+        app=_parse_string_field(table.get("app", ""), "[analyse].app"),
+        keywords=_parse_string_list(table.get("keywords"), "[analyse].keywords"),
+        regexes=_parse_string_list(table.get("regexes"), "[analyse].regexes"),
+        out=_parse_string_field(table.get("out", ""), "[analyse].out"),
+        stdout=_parse_bool_field(table.get("stdout", False), "[analyse].stdout"),
+    )
+
+
+def _parse_search(raw: Any) -> SearchConfig:
+    table = _expect_mapping(raw, "search")
+    max_raw = table.get("max", 0)
+    if isinstance(max_raw, bool) or not isinstance(max_raw, int):
+        # bool is an int subclass; reject so `max = true` doesn't silently
+        # cap matches at 1.
+        raise ConfigError(f"[search].max must be an integer, got {type(max_raw).__name__}")
+    if max_raw < 0:
+        raise ConfigError("[search].max must be >= 0")
+    return SearchConfig(
+        run=_parse_string_field(table.get("run", "latest"), "[search].run"),
+        app=_parse_string_field(table.get("app", ""), "[search].app"),
+        keywords=_parse_string_list(table.get("keywords"), "[search].keywords"),
+        regexes=_parse_string_list(table.get("regexes"), "[search].regexes"),
+        case_sensitive=_parse_bool_field(
+            table.get("case_sensitive", False), "[search].case_sensitive"
+        ),
+        max=max_raw,
+    )
+
+
+def _parse_string_field(value: Any, label: str) -> str:
+    if not isinstance(value, str):
+        raise ConfigError(f"{label} must be a string, got {type(value).__name__}")
+    return value
+
+
+def _parse_bool_field(value: Any, label: str) -> bool:
+    if not isinstance(value, bool):
+        raise ConfigError(f"{label} must be a boolean, got {type(value).__name__}")
+    return value
 
 
 def _parse_duration_field(value: Any, label: str, *, require_positive: bool) -> int:

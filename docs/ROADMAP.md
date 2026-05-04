@@ -6,12 +6,13 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 ## Current state
 
 - **Last verified:** 2026-05-04
-- **Latest commit:** `Wire paperbark analyse subcommand (#7)` on `main`
-  (`be24a61`); the `feature/monitor-loop` branch carries the long-running
-  monitor and `rich.live` animator.
+- **Latest commit:** `Add gitattributes for LF normalisation` on `main`
+  (`644a4f4`), built on `Wire long-running monitor loop and rich.live
+  animator (#8)` (`21f8600`). The `feature/analyse-search-toml` branch
+  carries the TOML threading for `[analyse]` and `[search]`.
 - **Repo:** <https://github.com/Good-Native/paperbark>
 - **Released:** nothing yet (version stub `0.0.0`).
-- **Tests:** 311 passing across 21 test modules; CI green on every push
+- **Tests:** 350 passing across 24 test modules; CI green on every push
   since `Land uv.lock and unblock CI`.
 
 ### Implementation status
@@ -33,10 +34,14 @@ An end-to-end live `paperbark monitor` run is now wired: the loop
 captures on a fixed cadence, fires snapshot analyses every
 `analyse_every` seconds, swaps in the `rich.live` ticker on a TTY
 (plain progress lines on non-TTY), and writes the final analysis at
-the run root when the loop ends. The next-step shortlist is now
-operational polish (TOML threading for `[analyse]`/`[search]`,
-`.gitattributes` LF baseline, the `docs/CONFIG.md` /
-`docs/SOURCES.md` / `docs/PROBES.md` source-of-truth docs).
+the run root when the loop ends. The `.gitattributes` LF baseline
+landed direct-to-`main` in `644a4f4`. The
+`feature/analyse-search-toml` branch threads `[analyse]` and
+`[search]` through the TOML loader so every CLI flag for those
+subcommands is also a TOML key. Remaining shortlist: the
+`docs/CONFIG.md` / `docs/SOURCES.md` / `docs/PROBES.md`
+source-of-truth docs, then release prep (PyPI reservation, version
+bump from `0.0.0`, Homebrew formula).
 
 ### Scaffold (done)
 
