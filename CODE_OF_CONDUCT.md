@@ -15,7 +15,7 @@ spaces.
 ## Enforcement
 
 Concerns may be reported to the project maintainers at
-**conduct@good-native.dev**. All reports will be reviewed and
+**support@goodnative.co**. All reports will be reviewed and
 investigated promptly and fairly. Maintainers are obligated to respect
 the privacy and security of anyone who reports an incident.
 

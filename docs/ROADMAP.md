@@ -6,11 +6,13 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 ## Current state
 
 - **Last verified:** 2026-05-04
-- **Latest commit:** `Add docs/SOURCES.md source interface reference (#11)`
-  on `main` (`48e4a9d`). `docs/PROBES.md` lands next.
+- **Latest commit on `main`:** `Reject unknown source option keys (#12)`
+  (`a99953b`). PR #13 (in review) adds `docs/PROBES.md`, wires
+  `[probes]` toggles and `[probes.patterns]` overrides through to the
+  runtime, and retires `reference/`.
 - **Repo:** <https://github.com/Good-Native/paperbark>
 - **Released:** nothing yet (version stub `0.0.0`).
-- **Tests:** 363 passing across 26 test modules; CI has been green on
+- **Tests:** 380 passing across 27 test modules; CI has been green on
   every push since the `Land uv.lock and unblock CI` change.
 
 ### Implementation status
@@ -36,8 +38,10 @@ the run root when the loop ends. The `.gitattributes` LF baseline
 landed direct-to-`main` in `644a4f4`. PR #9 threaded `[analyse]` and
 `[search]` through the TOML loader, so every CLI flag for those
 subcommands is also a TOML key. PRs #10 and #11 filled in
-`docs/CONFIG.md` and `docs/SOURCES.md`. Remaining shortlist:
-`docs/PROBES.md`, then release prep (PyPI reservation, version bump
+`docs/CONFIG.md` and `docs/SOURCES.md`; PR #13 (in review) adds
+`docs/PROBES.md`, wires `[probes]` toggles and `[probes.patterns]`
+overrides through to the runtime, and retires `reference/`. Remaining
+shortlist after PR #13: release prep (PyPI reservation, version bump
 from `0.0.0`, Homebrew formula).
 
 ### Scaffold (done)
@@ -62,8 +66,6 @@ from `0.0.0`, Homebrew formula).
 - **Remote uses HTTPS**, not SSH — the user's local SSH identity isn't
   registered against the `Good-Native` org. Pushes go via `gh`'s
   credential helper. Optional follow-up: register an SSH key.
-- **Code-of-conduct contact** is a placeholder
-  (`conduct@good-native.dev`). Replace before announcing publicly.
 - **Direct-to-main commits before PR #1** never went through the
   CodeRabbit bot (only the search PR did). The CLI is installed in
   WSL; running `coderabbit review --type committed --base-commit
@@ -156,24 +158,23 @@ Suggested ordering, smallest and most-tested first:
 Each step lands behind passing CI. Add a `CHANGELOG.md` entry per
 user-visible change.
 
-### What to keep vs rebuild
+### What was kept vs rebuilt
 
-Originals live in `reference/` (also in
-`~/Documents/GitHub/hover/scripts/`, MIT-licensed).
+The bash originals (formerly tracked under `reference/`, also in
+`~/Documents/GitHub/hover/scripts/`, MIT-licensed) were retired ahead of
+v0.1. The mapping for posterity:
 
 | File                       | Action                                                   |
 | -------------------------- | -------------------------------------------------------- |
-| `analyse_logs.py`          | Port directly; well-tested                               |
-| `filter_since.py`          | Port directly; small and correct                         |
-| `aggregate_logs.py`        | Port directly                                            |
-| `process_logs.py`          | Port directly                                            |
-| `search_logs.py`           | Port directly                                            |
-| `logs.sh` dispatcher       | Rebuild as `argparse` + `rich.live`                      |
-| Bash banner / kv printing  | Rebuild with `rich.table` / `rich.panel`                 |
-| Background ticker animator | Rebuild with `threading.Thread` driving `rich.live.Live` |
-| Capture loop               | Rebuild with `subprocess.Popen` + `concurrent.futures`   |
-
-Delete `reference/` once v0.1 ships.
+| `analyse_logs.py`          | Ported directly; well-tested                             |
+| `filter_since.py`          | Ported directly; small and correct                       |
+| `aggregate_logs.py`        | Ported directly                                          |
+| `process_logs.py`          | Ported directly                                          |
+| `search_logs.py`           | Ported directly                                          |
+| `logs.sh` dispatcher       | Rebuilt as `argparse` + `rich.live`                      |
+| Bash banner / kv printing  | Rebuilt with `rich.table` / `rich.panel`                 |
+| Background ticker animator | Rebuilt with `threading.Thread` driving `rich.live.Live` |
+| Capture loop               | Rebuilt with `subprocess.Popen` + `concurrent.futures`   |
 
 ## Gotchas already handled in the bash version
 
@@ -207,8 +208,6 @@ Carry these into the Python port:
 - Cross-run search and aggregation queries.
 - Optional alert sinks (Slack, PagerDuty).
 - Homebrew formula and PyPI release automation.
-- `docs/PROBES.md` — referenced from `README.md` and pending completion
-  before release prep.
 
 ## Naming and registries
 

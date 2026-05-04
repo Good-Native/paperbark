@@ -18,7 +18,13 @@ from typing import TYPE_CHECKING
 from paperbark import __version__
 
 if TYPE_CHECKING:  # pragma: no cover — types only.
-    from paperbark.config import AnalyseConfig, Config, MonitorConfig, SearchConfig
+    from paperbark.config import (
+        AnalyseConfig,
+        Config,
+        MonitorConfig,
+        ProbesConfig,
+        SearchConfig,
+    )
     from paperbark.dispatcher import MonitorState, SnapshotRunner
 
 _NOT_IMPLEMENTED_EXIT = 2
@@ -290,7 +296,7 @@ def _run_monitor(args: argparse.Namespace) -> int:
         sys.stderr.write(f"monitor error: {exc}\n")
         return 2
 
-    snapshot_runner = _make_snapshot_runner(config.root, run_analyse)
+    snapshot_runner = _make_snapshot_runner(config.root, run_analyse, config.probes)
 
     stop_event = threading.Event()
     previous_handler = signal.getsignal(signal.SIGINT)
@@ -397,6 +403,7 @@ def _merge_monitor_overrides(
 def _make_snapshot_runner(
     root: Path,
     run_analyse: Callable[[argparse.Namespace], int],
+    probes_cfg: ProbesConfig,
 ) -> SnapshotRunner:
     """Build a :data:`SnapshotRunner` that calls into ``paperbark.analyse``.
 
@@ -417,6 +424,7 @@ def _make_snapshot_runner(
             regex=[],
             out=str(out_base) if out_base is not None else None,
             stdout=False,
+            probes=probes_cfg,
         )
         # ``run_analyse`` reports soft failures (e.g. "no app dirs with raw
         # logs") via a non-zero return without raising. Convert that to an
@@ -474,6 +482,7 @@ def _run_analyse(args: argparse.Namespace) -> int:
             regex=list(analyse_cfg.regexes),
             out=analyse_cfg.out or None,
             stdout=analyse_cfg.stdout,
+            probes=config.probes,
         )
     )
 
