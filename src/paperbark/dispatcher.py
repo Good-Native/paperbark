@@ -9,17 +9,21 @@ summarised, and the per-app aggregate state is refreshed.
 A run-dir laid out per :data:`docs/ROADMAP.md`'s public-contract section
 is created on the first call and reused for every subsequent iteration::
 
-    logs/YYYYMMDD/HHMM_<slug>/
+    logs/YYYYMMDD/HHMM_<slug>_<settings>/
     ├── <app>/raw/iter_<NNN>_<HHMMSSZ>.log
     ├── <app>/.cursor
     ├── <app>/iter_<NNN>_<HHMMSSZ>.json
     ├── <app>/time_series.csv
     ├── <app>/events_per_minute.csv
     ├── <app>/components_per_minute.csv
-    └── <app>/summary.md
+    ├── <app>/summary.md
+    ├── snapshots/analysis_<HHMMSSZ>.{json,md}   # written every analyse_every
+    ├── analysis.{json,md}                       # final probe report
+    └── monitor.log                              # per-iteration ticker log
 
-This first cut runs **one** iteration per call; the iteration loop and
-the ``rich.live`` ticker land in a follow-up PR.
+The single-iteration helpers :func:`capture_iteration` / :func:`run_iteration`
+remain available for tests and ad-hoc tooling; :func:`run_monitor_loop`
+wraps them in the cadence-driven loop the CLI uses.
 """
 
 from __future__ import annotations
@@ -27,12 +31,15 @@ from __future__ import annotations
 import json
 import random
 import re
-from collections.abc import Sequence
+import threading
+import time
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
 from paperbark.aggregate import aggregate
-from paperbark.config import Config, SourceConfig
+from paperbark.config import Config, MonitorConfig, SourceConfig
 from paperbark.cursor import filter_stream
 from paperbark.iteration import summarise_log_file
 from paperbark.sources import (
@@ -44,6 +51,13 @@ from paperbark.sources import (
     StdinSource,
     WranglerSource,
 )
+
+# Type aliases for the loop's injection points. Keeping them at module scope
+# avoids long inline ``Callable[...]`` annotations on every signature.
+StateCallback = Callable[["MonitorState"], None]
+SnapshotRunner = Callable[[Path, Path | None], None]
+MonotonicClock = Callable[[], float]
+WallClock = Callable[[], datetime]
 
 # Adjective-colour slug pools mirror reference/logs.sh so concurrent runs are
 # easy to distinguish at a glance. Keep these in lockstep with the bash list;
@@ -118,7 +132,9 @@ def random_slug(*, rng: random.Random | None = None) -> str:
     get a deterministic slug. With no argument we instantiate a non-seeded
     :class:`random.Random`, which draws from the OS entropy pool.
     """
-    r = rng if rng is not None else random.Random()
+    # The slug is only a human-readable run ID; cryptographic strength would
+    # be wasted, hence the ``random`` module rather than ``secrets``.
+    r = rng if rng is not None else random.Random()  # noqa: S311
     return f"{r.choice(_SLUG_ADJECTIVES)}-{r.choice(_SLUG_COLOURS)}"
 
 
@@ -260,3 +276,210 @@ def run_monitor(
     run_dir = new_run_dir(config.root, slug=slug, now=now)
     run_iteration(sources, run_dir, iteration=1, now=now)
     return run_dir
+
+
+# --- long-running monitor --------------------------------------------------
+
+
+@dataclass(frozen=True)
+class MonitorState:
+    """Snapshot of loop progress, published after every iteration.
+
+    The animator (and tests) read this to keep the ticker fresh. ``finished``
+    flips to ``True`` for the final state push so a TTY consumer can swap from
+    "spinning" to "done" without polling.
+    """
+
+    iteration: int
+    iterations_max: int
+    elapsed_seconds: int
+    captured_total: int
+    next_snapshot_seconds: int  # -1 when snapshots disabled.
+    finished: bool = False
+
+
+@dataclass(frozen=True)
+class MonitorResult:
+    """Loop outcome surfaced to the CLI after :func:`run_monitor_loop` returns."""
+
+    run_dir: Path
+    iterations_completed: int
+    captured_total: int
+    stopped_early: bool
+
+
+def _resolve_run_slug(monitor: MonitorConfig, rng: random.Random | None) -> str:
+    """Return the user-supplied or auto-generated run slug for a monitor run."""
+    if monitor.run_id:
+        return monitor.run_id
+    return random_slug(rng=rng)
+
+
+def _count_lines(path: Path) -> int:
+    """Return the line count of ``path``, tolerating missing files."""
+    if not path.exists():
+        return 0
+    with path.open("rb") as f:
+        return sum(1 for _ in f)
+
+
+def _iso_log_ts(when: datetime) -> str:
+    return when.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def run_monitor_loop(
+    config: Config,
+    *,
+    monitor: MonitorConfig | None = None,
+    built_sources: Sequence[tuple[str, Source]] | None = None,
+    stop_event: threading.Event | None = None,
+    on_state: StateCallback | None = None,
+    snapshot_runner: SnapshotRunner | None = None,
+    rng: random.Random | None = None,
+    monotonic: MonotonicClock = time.monotonic,
+    clock: WallClock | None = None,
+) -> MonitorResult:
+    """Run ``paperbark monitor`` on a fixed cadence until stopped.
+
+    This is the cadence-driven counterpart to :func:`run_monitor` — instead of
+    capturing one iteration and returning, it loops until either ``iterations``
+    iterations have completed (or forever, when ``iterations == 0``) or
+    ``stop_event`` is set. The loop publishes a :class:`MonitorState` after
+    every iteration via ``on_state``, runs ``snapshot_runner`` every
+    ``analyse_every`` seconds, and runs the final aggregate + analyse before
+    returning. Subprocess SIGINT propagates naturally; the CLI installs a
+    handler that flips ``stop_event`` so the in-flight iteration finishes
+    cleanly before the loop exits.
+
+    All clock functions are injectable so tests can drive the loop forward
+    without sleeping. ``monotonic`` controls elapsed/sleep budgets; ``clock``
+    drives filesystem timestamps. ``built_sources`` and ``snapshot_runner``
+    let tests run the loop without flyctl or the analyse layer present.
+    """
+    sources = built_sources if built_sources is not None else build_sources(config)
+    if not sources:
+        raise DispatcherError(
+            "no sources configured; add at least one [[sources]] entry to paperbark.toml"
+        )
+    monitor_cfg = monitor if monitor is not None else config.monitor
+    stop = stop_event if stop_event is not None else threading.Event()
+    wall = clock if clock is not None else (lambda: datetime.now(tz=UTC))
+
+    slug = _resolve_run_slug(monitor_cfg, rng)
+    suffix = settings_suffix(monitor_cfg.interval, monitor_cfg.iterations)
+    full_slug = f"{slug}_{suffix}"
+    run_dir = new_run_dir(config.root, slug=full_slug, now=wall())
+    monitor_log = run_dir / "monitor.log"
+
+    def _log(message: str) -> None:
+        # Append-only so a crash mid-run doesn't truncate prior history.
+        with monitor_log.open("a", encoding="utf-8") as f:
+            f.write(f"[{_iso_log_ts(wall())}] {message}\n")
+
+    _log(f"Run dir: {run_dir}")
+    _log(
+        f"Sources: {', '.join(name for name, _ in sources)}; "
+        f"interval={monitor_cfg.interval}s iterations={monitor_cfg.iterations} "
+        f"analyse_every={monitor_cfg.analyse_every}s"
+    )
+
+    iteration = 0
+    captured_total = 0
+    start_mono = monotonic()
+    last_snapshot_mono = start_mono
+    snapshots_enabled = monitor_cfg.analyse_every > 0
+    stopped_early = False
+
+    def _publish(*, finished: bool) -> None:
+        if on_state is None:
+            return
+        if snapshots_enabled:
+            since = int(monotonic() - last_snapshot_mono)
+            next_snapshot = max(monitor_cfg.analyse_every - since, 0)
+        else:
+            next_snapshot = -1
+        on_state(
+            MonitorState(
+                iteration=iteration,
+                iterations_max=monitor_cfg.iterations,
+                elapsed_seconds=int(monotonic() - start_mono),
+                captured_total=captured_total,
+                next_snapshot_seconds=next_snapshot,
+                finished=finished,
+            )
+        )
+
+    _publish(finished=False)
+    try:
+        while not stop.is_set():
+            iteration += 1
+            iter_start_mono = monotonic()
+            now_wall = wall()
+            _log(f"Iteration {iteration}: capturing")
+            run_iteration(sources, run_dir, iteration=iteration, now=now_wall)
+
+            iter_lines = 0
+            iter_ts = now_wall.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
+            iter_label = f"iter_{iteration:04d}_{iter_ts}.log"
+            for name, _src in sources:
+                iter_lines += _count_lines(run_dir / name / "raw" / iter_label)
+            captured_total += iter_lines
+            _log(f"Iteration {iteration}: captured {iter_lines} new line(s)")
+
+            if snapshots_enabled and (
+                monotonic() - last_snapshot_mono >= monitor_cfg.analyse_every
+            ):
+                snap_ts = now_wall.astimezone(UTC).strftime("%H%M%SZ")
+                snap_base = run_dir / "snapshots" / f"analysis_{snap_ts}"
+                _log(f"Snapshot analyse → {snap_base}")
+                if snapshot_runner is not None:
+                    # One bad snapshot must not abort the loop; the bash
+                    # dispatcher swallows analyse failures the same way.
+                    try:
+                        snapshot_runner(run_dir, snap_base)
+                    except Exception as exc:
+                        _log(f"Snapshot analyse failed: {exc}")
+                last_snapshot_mono = monotonic()
+
+            _publish(finished=False)
+
+            if stop.is_set():
+                stopped_early = True
+                break
+            if monitor_cfg.iterations > 0 and iteration >= monitor_cfg.iterations:
+                break
+
+            elapsed = monotonic() - iter_start_mono
+            remaining = monitor_cfg.interval - elapsed
+            if remaining > 0:
+                # ``Event.wait`` returns True if the flag was set during the wait,
+                # so we exit the sleep early on Ctrl+C without burning the full
+                # interval. Returning False just means the timeout elapsed.
+                if stop.wait(timeout=remaining):
+                    stopped_early = True
+                    break
+            else:
+                _log(
+                    f"Iteration {iteration} took {elapsed:.1f}s "
+                    f"(>= interval {monitor_cfg.interval}s); running back-to-back"
+                )
+
+        # Final analyse runs whether we stopped early or hit the iteration cap;
+        # without it a Ctrl+C run would leave no analysis.{json,md} at the run
+        # root and downstream tooling would have to re-run analyse manually.
+        _log("Final analyse")
+        if snapshot_runner is not None:
+            try:
+                snapshot_runner(run_dir, None)
+            except Exception as exc:
+                _log(f"Final analyse failed: {exc}")
+    finally:
+        _publish(finished=True)
+        _log(f"Done after {iteration} iteration(s); captured {captured_total} new line(s)")
+
+    return MonitorResult(
+        run_dir=run_dir,
+        iterations_completed=iteration,
+        captured_total=captured_total,
+        stopped_early=stopped_early,
+    )
