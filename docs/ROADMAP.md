@@ -6,9 +6,10 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 ## Current state
 
 - **Last verified:** 2026-05-04
-- **Latest commit:** `Reject unknown source option keys (#12)`
-  on `main` (`a99953b`). `docs/PROBES.md` and the `[probes]` runtime
-  wiring land next via PR #13.
+- **Latest commit on `main`:** `Reject unknown source option keys (#12)`
+  (`a99953b`). PR #13 (in review) adds `docs/PROBES.md`, wires
+  `[probes]` toggles and `[probes.patterns]` overrides through to the
+  runtime, and retires `reference/`.
 - **Repo:** <https://github.com/Good-Native/paperbark>
 - **Released:** nothing yet (version stub `0.0.0`).
 - **Tests:** 380 passing across 27 test modules; CI has been green on
