@@ -158,10 +158,12 @@ Every key beyond `name` and `type` lands in `SourceConfig.options`.
 The dispatcher's `build_source` switch picks only the keys it knows
 about for each type and raises `DispatcherError` on any unrecognised
 key, so a typo in an option name fails loudly at startup rather than
-becoming a silent no-op. Validate required options inside the source's
-constructor (the way `flyctl` does for `app`) so missing values fail
-just as loudly. See [`docs/CONFIG.md`](CONFIG.md) for the full schema,
-including validation rules.
+becoming a silent no-op. Required options are validated in the
+matching `build_source` branch as well (the way `flyctl` checks `app`
+before constructing `FlyctlSource`); the source constructor may keep
+its own check as defence-in-depth, but the dispatcher is the
+canonical contract surface. See [`docs/CONFIG.md`](CONFIG.md) for the
+full schema, including validation rules.
 
 ## Adding a new source
 
