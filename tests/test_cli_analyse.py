@@ -73,6 +73,32 @@ def test_merge_stdout_flag_overrides_toml() -> None:
     assert result.stdout is True
 
 
+def test_merge_no_stdout_clears_toml_true() -> None:
+    """``--no-stdout`` (BooleanOptionalAction) must clear a TOML ``true``.
+
+    Pre-fix the parser only had ``--stdout`` with ``store_true``, so a TOML
+    ``[analyse].stdout = true`` could not be turned off at the CLI without
+    editing the file. ``BooleanOptionalAction`` exposes the negative form
+    ``--no-stdout`` which argparse stores as ``False`` on the same dest.
+    """
+    base = AnalyseConfig(stdout=True)
+    result = _merge_analyse_overrides(base, _ns(stdout=False))
+    assert result.stdout is False
+
+
+def test_no_stdout_flag_parses() -> None:
+    """``argparse.BooleanOptionalAction`` exposes the ``--no-stdout`` form."""
+    from paperbark.cli import _build_parser
+
+    parser = _build_parser()
+    args = parser.parse_args(["analyse", "--no-stdout"])
+    assert args.stdout is False
+    args = parser.parse_args(["analyse", "--stdout"])
+    assert args.stdout is True
+    args = parser.parse_args(["analyse"])
+    assert args.stdout is None  # neither flag → fall through to TOML
+
+
 def test_merge_out_blank_clears_toml_default() -> None:
     # The CLI passes "" only when the user explicitly types --out '' which is
     # a documented way to clear a TOML override and fall back to the default

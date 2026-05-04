@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `paperbark analyse`: `--stdout` is now `argparse.BooleanOptionalAction`,
+  so a `[analyse].stdout = true` in TOML can be cleared at the CLI with
+  `--no-stdout`. The previous `store_true`/`default=None` shape only let
+  the flag re-affirm `true`, breaking the documented "flags override TOML
+  at runtime" contract for that field.
 - `paperbark search`: `--ignore-case` is now wired through. Pre-fix it set a
   separate `args.ignore_case` dest that `paperbark.search.run` never read,
   so the flag was inert; that became user-visible once

@@ -176,11 +176,20 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Override output base path; writes <out>.json + <out>.md.",
     )
+    # ``BooleanOptionalAction`` (3.9+) gives us ``--stdout`` and ``--no-stdout``
+    # off a single dest. Without the negative form a TOML
+    # ``[analyse].stdout = true`` could only be re-affirmed at the CLI, never
+    # cleared — which violates the documented "flags override TOML at
+    # runtime" contract. ``default=None`` keeps "flag absent" distinguishable
+    # from "explicit False" so the merge step falls through to TOML.
     analyse.add_argument(
         "--stdout",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=None,
-        help="Also print the rendered markdown to stdout. Overrides [analyse].stdout.",
+        help=(
+            "Also print the rendered markdown to stdout. Overrides"
+            " [analyse].stdout; use --no-stdout to clear a TOML true."
+        ),
     )
 
     init = subparsers.add_parser(
