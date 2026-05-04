@@ -5,13 +5,14 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 
 ## Current state
 
-- **Last verified:** 2026-05-04
-- **Latest commit on `main`:** `Reject unknown source option keys (#12)`
-  (`a99953b`). PR #13 (in review) adds `docs/PROBES.md`, wires
-  `[probes]` toggles and `[probes.patterns]` overrides through to the
-  runtime, and retires `reference/`.
+- **Last verified:** 2026-05-05
+- **Latest commit on `main`:** `Cut 0.1.0 release (#14)` (`da04220`).
+  PR #13 landed `docs/PROBES.md`, wired `[probes]` toggles and
+  `[probes.patterns]` overrides through to the runtime, and retired
+  `reference/`; PR #14 cut the v0.1.0 version bump.
 - **Repo:** <https://github.com/Good-Native/paperbark>
-- **Released:** nothing yet (version stub `0.0.0`).
+- **Released:** v0.1.0 on 2026-05-04 (version bump only; PyPI and
+  Homebrew artefacts still pending).
 - **Tests:** 380 passing across 27 test modules; CI has been green on
   every push since the `Land uv.lock and unblock CI` change.
 
@@ -38,11 +39,12 @@ the run root when the loop ends. The `.gitattributes` LF baseline
 landed direct-to-`main` in `644a4f4`. PR #9 threaded `[analyse]` and
 `[search]` through the TOML loader, so every CLI flag for those
 subcommands is also a TOML key. PRs #10 and #11 filled in
-`docs/CONFIG.md` and `docs/SOURCES.md`; PR #13 (in review) adds
-`docs/PROBES.md`, wires `[probes]` toggles and `[probes.patterns]`
-overrides through to the runtime, and retires `reference/`. Remaining
-shortlist after PR #13: release prep (PyPI reservation, version bump
-from `0.0.0`, Homebrew formula).
+`docs/CONFIG.md` and `docs/SOURCES.md`; PR #13 added `docs/PROBES.md`,
+wired `[probes]` toggles and `[probes.patterns]` overrides through to
+the runtime, and retired `reference/`; PR #14 cut the v0.1.0 version
+bump (`pyproject.toml`, `__init__.py`, `uv.lock`, `CHANGELOG.md`).
+Remaining shortlist after v0.1.0: PyPI reservation and first upload,
+git tag + GitHub Release, Homebrew formula.
 
 ### Scaffold (done)
 
