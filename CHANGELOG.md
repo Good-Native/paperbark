@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- `docs/CONFIG.md`: full TOML schema reference. Documents discovery order,
+  override semantics, duration-string grammar, every key under
+  `[paperbark]` / `[monitor]` / `[analyse]` / `[search]` / `[probes]` /
+  `[probes.patterns]` / `[[sources]]`, the validation surface, the
+  run-dir layout contract, and four worked examples. README now links to
+  it instead of marking it forthcoming.
+
 ### Fixed
 
 - `paperbark analyse`: `--stdout` is now `argparse.BooleanOptionalAction`,
