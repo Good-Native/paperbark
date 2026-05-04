@@ -635,6 +635,11 @@ def test_run_monitor_loop_logs_overrun_warning(tmp_path: Path) -> None:
 
 
 def test_build_source_flyctl_threads_samples_through() -> None:
+    """``samples`` is enforced inside ``capture()`` via a bounded deque (the
+    bash dispatcher's ``| tail -n <samples>`` analogue), not via a flyctl
+    flag. The attribute round-trips so a probe of ``source.samples`` confirms
+    the TOML value reached the source instance.
+    """
     spec = SourceConfig(
         name="main",
         type="flyctl",
@@ -643,7 +648,10 @@ def test_build_source_flyctl_threads_samples_through() -> None:
     source = build_source(spec)
     assert isinstance(source, FlyctlSource)
     assert source.samples == 750
-    assert "750" in source.command
+    # Sanity-check the slicing: a runner that yields more than ``samples``
+    # lines should be trimmed at capture time.
+    source._runner = lambda _cmd: iter(f"line {i}\n" for i in range(800))
+    assert len(list(source.capture())) == 750
 
 
 def test_build_source_flyctl_rejects_non_int_samples() -> None:
@@ -840,7 +848,8 @@ def test_loop_warns_on_silent_format_mismatch(
     )
     err = capsys.readouterr().err
     assert "source 'nonjson'" in err
-    assert "captured 6 line(s) but parsed 0" in err
+    assert "parsed 0/6 line(s)" in err
+    assert "(0%)" in err
 
 
 # Helper used by the parse-rate test — repurposed from earlier _FakeSource

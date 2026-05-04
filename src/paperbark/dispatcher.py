@@ -526,13 +526,16 @@ def _delete_run(run_dir: Path, log: Callable[[str], None]) -> None:
 
 
 # Parse-rate threshold below which we warn the operator. The signal we care
-# about is "format mismatch" — a source whose every line fails to parse is
-# almost certainly producing output the configured format doesn't recognise,
-# and every probe will silently report "(no matches)" downstream. A floor of
-# five lines avoids flapping on tiny iters where a single noisy log line
-# could trip the warning.
+# about is "format mismatch" — a source whose lines mostly fail to parse is
+# almost certainly producing output the configured format doesn't fully
+# recognise, and probes downstream see a heavily depleted record set with no
+# diagnostic. The 50% floor catches both the "0 parsed" silent-failure case
+# and the "partially right format" case (e.g. an app with mixed JSON +
+# plain-text output where only a fraction of lines have an embedded record).
+# A minimum of five captured lines avoids flapping on tiny iters where a
+# single noisy log line could trip the warning.
 _PARSE_WARN_MIN_LINES = 5
-_PARSE_WARN_RATE = 0.0  # warn only when *no* line parses; tighten if needed.
+_PARSE_WARN_RATE = 0.5
 
 
 def _maybe_warn_parse_failure(
@@ -563,14 +566,16 @@ def _maybe_warn_parse_failure(
     rate = parsed / total
     if rate > _PARSE_WARN_RATE:
         return
+    pct = int(rate * 100)
     log(
-        f"Source {name!r}: {parsed}/{total} lines parsed — format may not match "
-        f"the captured log shape; configured probes will report no findings."
+        f"Source {name!r}: {parsed}/{total} lines parsed ({pct}%) — format may "
+        f"not match the captured log shape; probes downstream will see a "
+        f"depleted record set."
     )
     if name not in warned:
         warned.add(name)
         sys.stderr.write(
-            f"warning: source {name!r} captured {total} line(s) but parsed {parsed}; "
+            f"warning: source {name!r} parsed {parsed}/{total} line(s) ({pct}%); "
             f"check [[sources]] format settings.\n"
         )
 

@@ -10,10 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `[[sources]]` (flyctl) accepts a `samples` integer (default `400`) that
-  threads through to `flyctl logs -n <samples>`. Mirrors
-  `reference/logs.sh`'s `--samples` default; v0.1.0 quietly used flyctl's
-  built-in window (~100 lines), which dropped messages between iterations
-  on busy apps.
+  caps the number of lines kept from each `flyctl logs --no-tail` window.
+  `flyctl logs` itself has no native flag for this (`-n` is the short
+  form of `--no-tail`), so the bound is enforced inside `capture()` via
+  a bounded `deque` — same behaviour as the bash dispatcher's
+  `flyctl logs … | tail -n <samples>` pipe. v0.1.0 quietly used flyctl's
+  built-in window (~100 lines), which dropped messages between
+  iterations on busy apps.
 - `[[sources]]` (flyctl) accepts a `format_keys` table for per-field JSON
   key overrides (`timestamp`, `level`, `message`, `component`). Each value
   may be a string or a list of strings. The iteration parser threads the
@@ -28,10 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `*_iter*.{json,csv}` artefacts; summaries and time-series CSVs are
   preserved. `paperbark.search` already reads `raw.zip` transparently.
 - `paperbark monitor` now emits a one-time stderr warning (and a per-iter
-  line in `monitor.log`) when a source captures lines but parses none —
-  the silent format-mismatch case where every probe would otherwise
-  report "(no matches)" with no diagnostic. Threshold: at least
-  `_PARSE_WARN_MIN_LINES = 5` captured lines and `0%` parsed.
+  line in `monitor.log`) when a source's parse rate drops below 50% —
+  the format-mismatch case where probes downstream see a heavily
+  depleted record set with no other diagnostic. Threshold: at least
+  five captured lines and ≤50% parsed; smoke-tested live against the
+  hover-analysis Fly app (19/100 parsed → warning).
 - `paperbark search` now strips ANSI escape sequences from matched lines
   by default so piped/redirected output stays readable. New `--keep-ansi`
   flag preserves them for TTY-aware viewers.
@@ -58,9 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failures, not just DB driver errors. Pattern set is unchanged; users
   who want a DB-only matcher can override under
   `[probes.patterns].database`.
-- `FlyctlSource.command` now always includes `-n <samples>` (default
-  `400`); previously the flag was absent and flyctl fell back to its
-  built-in default.
+- `FlyctlSource.capture()` now buffers flyctl's output through a
+  `deque(maxlen=samples)` and yields the last N lines, matching
+  `reference/logs.sh`'s `flyctl logs … | tail -n $SAMPLES` pipe.
+  `samples` defaults to `400`.
 
 ### Fixed
 

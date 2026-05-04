@@ -5,11 +5,19 @@ Each call to :meth:`capture` runs a fresh subprocess and yields its
 stdout line by line; the cursor filter (``paperbark.cursor``) is
 responsible for dedup across overlapping iterations because Fly's
 ``--no-tail`` returns the same recent window every time.
+
+``flyctl logs`` itself has no native flag to cap the number of returned
+lines (``-n`` is the short form of ``--no-tail``), so the bash
+dispatcher pipes through ``tail -n <samples>``. We mirror that in
+``capture()`` by buffering through a bounded deque before yielding,
+which keeps the same upper bound on memory and the same "last N lines"
+semantics without spawning a second subprocess.
 """
 
 from __future__ import annotations
 
 import subprocess
+from collections import deque
 from collections.abc import Callable, Iterator
 
 _FLYCTL_TIMEOUT = 5.0  # seconds; how long to wait after terminate() before SIGKILL.
@@ -84,7 +92,7 @@ class FlyctlSource:
 
     @property
     def command(self) -> list[str]:
-        cmd = ["flyctl", "logs", "-a", self.app, "-n", str(self.samples)]
+        cmd = ["flyctl", "logs", "-a", self.app]
         if self.no_tail:
             cmd.append("--no-tail")
         return cmd
@@ -94,4 +102,10 @@ class FlyctlSource:
         # bounding. We drop the parameter rather than fail noisily — the
         # contract still holds because cursor filtering is mandatory anyway.
         del since
-        return self._runner(self.command)
+        raw = self._runner(self.command)
+        # Mirror the bash dispatcher's ``| tail -n <samples>``: keep only the
+        # last ``self.samples`` lines from flyctl's buffered output. This
+        # bounds memory at O(samples) and matches the ordering the bash
+        # version produces (chronological, most-recent-suffix kept).
+        buffered: deque[str] = deque(raw, maxlen=self.samples)
+        yield from buffered
