@@ -53,8 +53,8 @@ paperbark analyse --run latest
 
 Paperbark reads `./paperbark.toml` first, then
 `~/.config/paperbark/config.toml`. Every CLI flag is also expressible as a
-TOML key; flags override TOML at runtime. Full reference will live in
-`docs/CONFIG.md`.
+TOML key; flags override TOML at runtime. See [`docs/CONFIG.md`](docs/CONFIG.md)
+for the full schema reference.
 
 ## Sources
 

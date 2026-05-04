@@ -6,13 +6,12 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 ## Current state
 
 - **Last verified:** 2026-05-04
-- **Latest commit:** `Add gitattributes for LF normalisation` on `main`
-  (`644a4f4`), built on `Wire long-running monitor loop and rich.live
-  animator (#8)` (`21f8600`). The `feature/analyse-search-toml` branch
-  carries the TOML threading for `[analyse]` and `[search]`.
+- **Latest commit:** `Thread analyse and search through TOML (#9)` on
+  `main` (`46e2995`). The `feature/docs-config` branch carries the
+  source-of-truth `docs/CONFIG.md`.
 - **Repo:** <https://github.com/Good-Native/paperbark>
 - **Released:** nothing yet (version stub `0.0.0`).
-- **Tests:** 350 passing across 24 test modules; CI has been green on
+- **Tests:** 361 passing across 25 test modules; CI has been green on
   every push since the `Land uv.lock and unblock CI` change.
 
 ### Implementation status
@@ -35,12 +34,11 @@ captures on a fixed cadence, fires snapshot analyses every
 `analyse_every` seconds, swaps in the `rich.live` ticker on a TTY
 (plain progress lines on non-TTY), and writes the final analysis at
 the run root when the loop ends. The `.gitattributes` LF baseline
-landed direct-to-`main` in `644a4f4`. The
-`feature/analyse-search-toml` branch threads `[analyse]` and
+landed direct-to-`main` in `644a4f4`. PR #9 threaded `[analyse]` and
 `[search]` through the TOML loader, so every CLI flag for those
-subcommands is also a TOML key. Remaining shortlist: the
-`docs/CONFIG.md` / `docs/SOURCES.md` / `docs/PROBES.md`
-source-of-truth docs, then release prep (PyPI reservation, version
+subcommands is also a TOML key. The `feature/docs-config` branch
+fills in `docs/CONFIG.md`. Remaining shortlist: `docs/SOURCES.md`
+and `docs/PROBES.md`, then release prep (PyPI reservation, version
 bump from `0.0.0`, Homebrew formula).
 
 ### Scaffold (done)
@@ -210,8 +208,8 @@ Carry these into the Python port:
 - Cross-run search and aggregation queries.
 - Optional alert sinks (Slack, PagerDuty).
 - Homebrew formula and PyPI release automation.
-- `docs/SOURCES.md`, `docs/PROBES.md`, `docs/CONFIG.md` — currently
-  referenced from `README.md` and `CLAUDE.md` but not yet written.
+- `docs/SOURCES.md`, `docs/PROBES.md` — referenced from `README.md`
+  and pending completion before release prep.
 
 ## Naming and registries
 
