@@ -6,8 +6,8 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 ## Current state
 
 - **Last verified:** 2026-05-04
-- **Latest commit:** `Add docs/CONFIG.md TOML schema reference (#10)` on
-  `main` (`4f1e440`). `docs/SOURCES.md` lands next.
+- **Latest commit:** `Add docs/SOURCES.md source interface reference (#11)`
+  on `main` (`48e4a9d`). `docs/PROBES.md` lands next.
 - **Repo:** <https://github.com/Good-Native/paperbark>
 - **Released:** nothing yet (version stub `0.0.0`).
 - **Tests:** 363 passing across 26 test modules; CI has been green on
@@ -35,8 +35,8 @@ captures on a fixed cadence, fires snapshot analyses every
 the run root when the loop ends. The `.gitattributes` LF baseline
 landed direct-to-`main` in `644a4f4`. PR #9 threaded `[analyse]` and
 `[search]` through the TOML loader, so every CLI flag for those
-subcommands is also a TOML key. PR #10 fills in `docs/CONFIG.md` and
-this branch fills in `docs/SOURCES.md`. Remaining shortlist:
+subcommands is also a TOML key. PRs #10 and #11 filled in
+`docs/CONFIG.md` and `docs/SOURCES.md`. Remaining shortlist:
 `docs/PROBES.md`, then release prep (PyPI reservation, version bump
 from `0.0.0`, Homebrew formula).
 
