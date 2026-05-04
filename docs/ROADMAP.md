@@ -5,33 +5,38 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 
 ## Current state
 
-- **Last verified:** 2026-05-03
-- **Latest commit:** `Merge pull request #6` on `main` (`a940f0e`).
+- **Last verified:** 2026-05-04
+- **Latest commit:** `Wire paperbark analyse subcommand (#7)` on `main`
+  (`be24a61`); the `feature/monitor-loop` branch carries the long-running
+  monitor and `rich.live` animator.
 - **Repo:** <https://github.com/Good-Native/paperbark>
 - **Released:** nothing yet (version stub `0.0.0`).
-- **Tests:** 215 passing across 17 test modules; CI green on every push
+- **Tests:** 311 passing across 21 test modules; CI green on every push
   since `Land uv.lock and unblock CI`.
 
 ### Implementation status
 
-| #   | Step                                                        | Status                                                                   |
-| --- | ----------------------------------------------------------- | ------------------------------------------------------------------------ |
-| 1   | Port `filter_since.py` → `paperbark.cursor`                 | ✅ done                                                                  |
-| 2   | Port `analyse_logs.py` → `paperbark.probes/`                | ✅ done                                                                  |
-| 3   | Port `aggregate_logs.py` → `paperbark.aggregate`            | ✅ done                                                                  |
-| 4   | Port `process_logs.py` → `paperbark.iteration`              | ✅ done                                                                  |
-| 5   | Port `search_logs.py` → `paperbark.search` (wired into CLI) | ✅ done (PR #1)                                                          |
-| 6   | Source interface + flyctl source (stubs for the rest)       | ✅ done                                                                  |
-| 7   | Format interface + built-in presets                         | ✅ done                                                                  |
-| 8   | Dispatcher and animator (`rich.live`) replacing `logs.sh`   | 🟡 partial — one-shot dispatcher landed (PR #5); loop + animator pending |
-| 9   | `paperbark init` TOML writer                                | ✅ done (PR #6)                                                          |
-| 10  | Wire `paperbark analyse` over captured runs                 | ✅ done                                                                  |
+| #   | Step                                                        | Status                                                  |
+| --- | ----------------------------------------------------------- | ------------------------------------------------------- |
+| 1   | Port `filter_since.py` → `paperbark.cursor`                 | ✅ done                                                 |
+| 2   | Port `analyse_logs.py` → `paperbark.probes/`                | ✅ done                                                 |
+| 3   | Port `aggregate_logs.py` → `paperbark.aggregate`            | ✅ done                                                 |
+| 4   | Port `process_logs.py` → `paperbark.iteration`              | ✅ done                                                 |
+| 5   | Port `search_logs.py` → `paperbark.search` (wired into CLI) | ✅ done (PR #1)                                         |
+| 6   | Source interface + flyctl source (stubs for the rest)       | ✅ done                                                 |
+| 7   | Format interface + built-in presets                         | ✅ done                                                 |
+| 8   | Dispatcher and animator (`rich.live`) replacing `logs.sh`   | ✅ done — long-running loop + `rich.live` ticker landed |
+| 9   | `paperbark init` TOML writer                                | ✅ done (PR #6)                                         |
+| 10  | Wire `paperbark analyse` over captured runs                 | ✅ done (PR #7)                                         |
 
-The remaining blocker for an end-to-end live `paperbark monitor` run is
-PR-C of step 8 — the iteration loop plus the `rich.live` ticker that
-turns the current one-shot dispatcher into the long-running command.
-The TOML config layer landed with PR #3 and is already in use by the
-dispatcher and `analyse`.
+An end-to-end live `paperbark monitor` run is now wired: the loop
+captures on a fixed cadence, fires snapshot analyses every
+`analyse_every` seconds, swaps in the `rich.live` ticker on a TTY
+(plain progress lines on non-TTY), and writes the final analysis at
+the run root when the loop ends. The next-step shortlist is now
+operational polish (TOML threading for `[analyse]`/`[search]`,
+`.gitattributes` LF baseline, the `docs/CONFIG.md` /
+`docs/SOURCES.md` / `docs/PROBES.md` source-of-truth docs).
 
 ### Scaffold (done)
 

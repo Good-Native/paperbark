@@ -9,6 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `paperbark monitor` is now long-running. The dispatcher's
+  `run_monitor_loop` repeats `run_iteration` on a fixed cadence until the
+  iteration cap is reached or the user interrupts; SIGINT flips a
+  `threading.Event` so the in-flight iteration finishes cleanly, the
+  final aggregate + analyse still write, and exit 130 propagates. Snapshot
+  analyses fire every `analyse_every` seconds into
+  `<run>/snapshots/analysis_<HHMMSSZ>.{md,json}` (set 0 to disable). Every
+  significant event lands in `<run>/monitor.log`. New CLI flags:
+  `--interval`, `--iterations`, `--run-id`, `--analyse-every`. All four
+  mirror the `[monitor]` TOML section so config and flags express the
+  same surface; flags override TOML at runtime.
+- `paperbark.animator`: `rich.live`-driven ticker that renders elapsed
+  time, iteration counter, captured-line total, and time-until-next
+  snapshot. Spinner uses the bash dispatcher's `◐ ◓ ◑ ◒` quarter-circles
+  (Braille glyphs render too small in some terminals). Pure
+  `render_status` lets tests pin the line without a TTY; the
+  `MonitorAnimator` context manager owns the redraw thread and ticks
+  elapsed/snapshot fields between state publishes so the line stays
+  alive during slow flyctl captures. Eight unit tests.
+- `paperbark.duration`: shared `parse_duration` /
+  `format_elapsed` helpers consumed by the loop, the animator, and the
+  `[monitor]` config section. Accepts the same shorthand as the bash
+  dispatcher (`30s`, `5m`, `1h`, plain seconds); rejects combined forms.
+  Twelve parse cases plus elapsed-format coverage.
+- `paperbark.config`: new `[monitor]` table. `MonitorConfig` carries
+  `interval`, `iterations`, `analyse_every`, `run_id` with defaults that
+  match `reference/logs.sh` (3s cadence, 1440 iterations, 5-minute
+  snapshots, auto-generated slug). `run_id` is validated against the
+  same path-safety regex as the bash dispatcher.
+- `paperbark.dispatcher`: `random_slug()` (auto-generated
+  `<adjective>-<colour>` run identifiers) and `settings_suffix()` (the
+  `<interval>_<duration>` half of the run-dir name). Both ported from
+  `reference/logs.sh`; pools and rounding match the bash exactly so a
+  Python-emitted run name lines up with anything downstream tooling
+  built around the bash version.
 - `paperbark.analyse`: `paperbark analyse` is now wired end to end. Replays
   every captured raw line through `paperbark.probes.parse_line` and the
   `default_probes()` set, then writes `analysis.json` and `analysis.md`

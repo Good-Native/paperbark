@@ -332,7 +332,7 @@ def _parse_monitor(raw: Any) -> MonitorConfig:
 
 def _parse_duration_field(value: Any, label: str, *, require_positive: bool) -> int:
     """Validate a TOML duration field, accepting int seconds or shorthand strings."""
-    if isinstance(value, bool) or not isinstance(value, (int, str)):
+    if isinstance(value, bool) or not isinstance(value, int | str):
         raise ConfigError(
             f"{label} must be an integer or duration string, got {type(value).__name__}"
         )

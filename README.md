@@ -8,9 +8,9 @@ them, and writes a stable run-directory layout that downstream tooling can
 search across.
 
 > Status: pre-alpha. The probe, format, source (flyctl), iteration,
-> aggregate, cursor-filter, and search layers are landed; the
-> dispatcher and TOML config that compose them into `paperbark
-monitor` are in progress. No releases yet — see
+> aggregate, cursor-filter, search, dispatcher, and analyse layers are
+> all wired up; `paperbark monitor` runs end to end on a configurable
+> cadence with a `rich.live` ticker. No releases yet — see
 > [docs/ROADMAP.md](docs/ROADMAP.md) for current status.
 
 ## Install
@@ -33,8 +33,14 @@ For local development, see [CONTRIBUTING.md](CONTRIBUTING.md).
 # write a starter config in the current directory
 paperbark init
 
-# capture and analyse using config defaults
+# capture and analyse using config defaults (3s cadence, ~72 minutes)
 paperbark monitor
+
+# tighter cadence, fixed run id, snapshots every 30s
+paperbark monitor --interval 5s --run-id incident-pr349 --analyse-every 30s
+
+# capture forever; press Ctrl+C to write the final report and exit
+paperbark monitor --iterations 0
 
 # search across captured runs
 paperbark search --keyword "panic"
