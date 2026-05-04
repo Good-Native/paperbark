@@ -156,24 +156,23 @@ Suggested ordering, smallest and most-tested first:
 Each step lands behind passing CI. Add a `CHANGELOG.md` entry per
 user-visible change.
 
-### What to keep vs rebuild
+### What was kept vs rebuilt
 
-Originals live in `reference/` (also in
-`~/Documents/GitHub/hover/scripts/`, MIT-licensed).
+The bash originals (formerly tracked under `reference/`, also in
+`~/Documents/GitHub/hover/scripts/`, MIT-licensed) were retired ahead of
+v0.1. The mapping for posterity:
 
 | File                       | Action                                                   |
 | -------------------------- | -------------------------------------------------------- |
-| `analyse_logs.py`          | Port directly; well-tested                               |
-| `filter_since.py`          | Port directly; small and correct                         |
-| `aggregate_logs.py`        | Port directly                                            |
-| `process_logs.py`          | Port directly                                            |
-| `search_logs.py`           | Port directly                                            |
-| `logs.sh` dispatcher       | Rebuild as `argparse` + `rich.live`                      |
-| Bash banner / kv printing  | Rebuild with `rich.table` / `rich.panel`                 |
-| Background ticker animator | Rebuild with `threading.Thread` driving `rich.live.Live` |
-| Capture loop               | Rebuild with `subprocess.Popen` + `concurrent.futures`   |
-
-Delete `reference/` once v0.1 ships.
+| `analyse_logs.py`          | Ported directly; well-tested                             |
+| `filter_since.py`          | Ported directly; small and correct                       |
+| `aggregate_logs.py`        | Ported directly                                          |
+| `process_logs.py`          | Ported directly                                          |
+| `search_logs.py`           | Ported directly                                          |
+| `logs.sh` dispatcher       | Rebuilt as `argparse` + `rich.live`                      |
+| Bash banner / kv printing  | Rebuilt with `rich.table` / `rich.panel`                 |
+| Background ticker animator | Rebuilt with `threading.Thread` driving `rich.live.Live` |
+| Capture loop               | Rebuilt with `subprocess.Popen` + `concurrent.futures`   |
 
 ## Gotchas already handled in the bash version
 
@@ -207,8 +206,6 @@ Carry these into the Python port:
 - Cross-run search and aggregation queries.
 - Optional alert sinks (Slack, PagerDuty).
 - Homebrew formula and PyPI release automation.
-- `docs/PROBES.md` — referenced from `README.md` and pending completion
-  before release prep.
 
 ## Naming and registries
 
