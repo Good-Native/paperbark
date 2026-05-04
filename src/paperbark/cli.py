@@ -11,10 +11,15 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from paperbark import __version__
+
+if TYPE_CHECKING:  # pragma: no cover — types only.
+    from paperbark.config import MonitorConfig
+    from paperbark.dispatcher import MonitorState, SnapshotRunner
 
 _NOT_IMPLEMENTED_EXIT = 2
 
@@ -40,6 +45,27 @@ def _build_parser() -> argparse.ArgumentParser:
         "--config",
         default=None,
         help="Path to a paperbark.toml; overrides discovery.",
+    )
+    monitor.add_argument(
+        "--interval",
+        default=None,
+        help="Seconds between iterations (or 30s/5m/1h). Overrides [monitor].interval.",
+    )
+    monitor.add_argument(
+        "--iterations",
+        type=int,
+        default=None,
+        help="Number of iterations (0 = forever). Overrides [monitor].iterations.",
+    )
+    monitor.add_argument(
+        "--run-id",
+        default=None,
+        help="Run identifier (slug). Overrides [monitor].run_id; empty = auto-generate.",
+    )
+    monitor.add_argument(
+        "--analyse-every",
+        default=None,
+        help=("Snapshot analyse cadence (or 0 to disable). Overrides [monitor].analyse_every."),
     )
 
     search = subparsers.add_parser(
@@ -190,19 +216,23 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _run_monitor(args: argparse.Namespace) -> int:
-    """Glue between ``cli`` argparse and the dispatcher.
+    """Glue between ``cli`` argparse and the long-running dispatcher loop.
 
-    Loads the TOML config (explicit ``--config`` or discovery), runs one
-    iteration, and prints the resulting run directory. Errors from the
-    config and dispatcher layers surface as exit 2 with a single-line
-    stderr message.
+    Loads the TOML config (explicit ``--config`` or discovery), merges CLI
+    flag overrides into the :class:`MonitorConfig`, installs a SIGINT handler
+    that flips the loop's stop flag, and runs the dispatcher's iteration loop
+    until it stops naturally or the user interrupts. On a TTY we drive the
+    rich-live animator; without a TTY we fall back to one progress line per
+    iteration on stderr so logs and CI capture remain readable.
     """
-    from paperbark.config import ConfigError, load
-    from paperbark.dispatcher import DispatcherError, run_monitor
+    import signal
+    import threading
 
-    # When the user invokes plain `paperbark` (no subcommand), the
-    # `monitor` subparser hasn't run, so attributes like `config` aren't
-    # on the namespace. Treat that case as "no overrides, use defaults".
+    from paperbark.analyse import run as run_analyse
+    from paperbark.animator import MonitorAnimator
+    from paperbark.config import ConfigError, load
+    from paperbark.dispatcher import DispatcherError, run_monitor_loop
+
     config_arg = getattr(args, "config", None)
     config_path = Path(config_arg) if config_arg else None
     try:
@@ -210,13 +240,164 @@ def _run_monitor(args: argparse.Namespace) -> int:
     except ConfigError as exc:
         sys.stderr.write(f"config error: {exc}\n")
         return 2
+
     try:
-        run_dir = run_monitor(config)
+        monitor_cfg = _merge_monitor_overrides(config.monitor, args)
+    except ValueError as exc:
+        sys.stderr.write(f"monitor error: {exc}\n")
+        return 2
+
+    snapshot_runner = _make_snapshot_runner(config.root, run_analyse)
+
+    stop_event = threading.Event()
+    previous_handler = signal.getsignal(signal.SIGINT)
+
+    def _handle_sigint(_signum: int, _frame: object) -> None:
+        # First Ctrl+C asks the loop to finish gracefully; a second one bypasses
+        # this handler (it has been replaced by the default again) and exits hard.
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
+        stop_event.set()
+        sys.stderr.write("\nstop requested — finishing current iteration...\n")
+
+    signal.signal(signal.SIGINT, _handle_sigint)
+
+    use_animator = sys.stdout.isatty()
+    try:
+        if use_animator:
+            with MonitorAnimator() as ticker:
+                result = run_monitor_loop(
+                    config,
+                    monitor=monitor_cfg,
+                    stop_event=stop_event,
+                    on_state=ticker.update,
+                    snapshot_runner=snapshot_runner,
+                )
+        else:
+            result = run_monitor_loop(
+                config,
+                monitor=monitor_cfg,
+                stop_event=stop_event,
+                on_state=_print_state_line,
+                snapshot_runner=snapshot_runner,
+            )
     except DispatcherError as exc:
         sys.stderr.write(f"monitor error: {exc}\n")
         return 2
-    sys.stdout.write(f"run: {run_dir}\n")
+    finally:
+        signal.signal(signal.SIGINT, previous_handler)
+
+    sys.stdout.write(
+        f"run: {result.run_dir} "
+        f"({result.iterations_completed} iteration(s), "
+        f"{result.captured_total} line(s) captured)\n"
+    )
+    if result.stopped_early:
+        sys.stdout.write("stopped early on user request.\n")
     return 0
+
+
+def _merge_monitor_overrides(
+    base: MonitorConfig,
+    args: argparse.Namespace,
+) -> MonitorConfig:
+    """Apply ``args`` overrides to ``base``, preserving defaults for anything unset.
+
+    Unspecified flags come through as ``None`` (per ``default=None`` on the
+    argparse spec), so we use that as the "leave alone" sentinel. Validation
+    delegates to :func:`paperbark.duration.parse_duration` for the time fields
+    so the same forms accepted in TOML work on the CLI.
+    """
+    from paperbark.config import MonitorConfig
+    from paperbark.duration import parse_duration
+
+    interval = base.interval
+    iterations = base.iterations
+    analyse_every = base.analyse_every
+    run_id = base.run_id
+
+    interval_arg = getattr(args, "interval", None)
+    if interval_arg is not None:
+        seconds = parse_duration(interval_arg)
+        if seconds <= 0:
+            raise ValueError("--interval must be > 0")
+        interval = seconds
+
+    iterations_arg = getattr(args, "iterations", None)
+    if iterations_arg is not None:
+        if iterations_arg < 0:
+            raise ValueError("--iterations must be >= 0")
+        iterations = iterations_arg
+
+    analyse_every_arg = getattr(args, "analyse_every", None)
+    if analyse_every_arg is not None:
+        analyse_every = parse_duration(analyse_every_arg)
+
+    run_id_arg = getattr(args, "run_id", None)
+    if run_id_arg is not None:
+        from paperbark.config import RUN_ID_HELP, is_valid_run_id
+
+        # The TOML path validates run_id against the same regex; the CLI
+        # override path used to skip it, which let `--run-id ../escape`
+        # silently bypass the path-safety check we apply via TOML.
+        if not is_valid_run_id(run_id_arg):
+            raise ValueError(f"--run-id: {RUN_ID_HELP}")
+        run_id = run_id_arg
+
+    return MonitorConfig(
+        interval=interval,
+        iterations=iterations,
+        analyse_every=analyse_every,
+        run_id=run_id,
+    )
+
+
+def _make_snapshot_runner(
+    root: Path,
+    run_analyse: Callable[[argparse.Namespace], int],
+) -> SnapshotRunner:
+    """Build a :data:`SnapshotRunner` that calls into ``paperbark.analyse``.
+
+    The dispatcher invokes this with ``(run_dir, out_base)``. ``out_base``
+    selects between snapshot writes (``<run>/snapshots/analysis_<ts>``) and
+    the final report (``None`` → :func:`paperbark.analyse.run` defaults to
+    ``<run>/analysis``). We build an :class:`argparse.Namespace` matching the
+    analyse subcommand's contract so the same code path serves both modes.
+    """
+
+    def _run(run_dir: Path, out_base: Path | None) -> None:
+        rel = run_dir.relative_to(root).as_posix()
+        ns = argparse.Namespace(
+            run=rel,
+            root=str(root),
+            app="",
+            keyword=[],
+            regex=[],
+            out=str(out_base) if out_base is not None else None,
+            stdout=False,
+        )
+        # ``run_analyse`` reports soft failures (e.g. "no app dirs with raw
+        # logs") via a non-zero return without raising. Convert that to an
+        # exception so the dispatcher's ``snapshot_runner`` try/except logs
+        # the failure to monitor.log instead of treating it as success.
+        rc = run_analyse(ns)
+        if rc != 0:
+            raise RuntimeError(f"paperbark analyse exited with code {rc}")
+
+    return _run
+
+
+def _print_state_line(state: MonitorState) -> None:
+    """Plain-text fallback for non-TTY ``on_state``: one line per publish."""
+    if state.iteration == 0 and not state.finished:
+        return  # initial pre-loop publish; nothing user-facing yet.
+    suffix = " [done]" if state.finished else ""
+    iter_part = f"{state.iteration}"
+    if state.iterations_max > 0:
+        iter_part = f"{state.iteration}/{state.iterations_max}"
+    sys.stderr.write(
+        f"iter {iter_part} elapsed={state.elapsed_seconds}s "
+        f"captured={state.captured_total}{suffix}\n"
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover

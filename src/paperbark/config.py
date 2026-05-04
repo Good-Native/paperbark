@@ -17,6 +17,12 @@ Schema overview::
     [paperbark]
     root = "logs"             # output directory; default "logs"
 
+    [monitor]
+    interval = 3              # seconds between iterations (or "30s", "5m")
+    iterations = 1440         # 0 = forever
+    analyse_every = "5m"      # 0 = disabled
+    run_id = ""               # empty = auto-generated <adjective>-<colour> slug
+
     [probes]
     severity = true
     panics = true
@@ -43,11 +49,14 @@ Schema overview::
 
 from __future__ import annotations
 
+import re
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from paperbark.duration import parse_duration
 
 DEFAULT_ROOT = "logs"
 PROBE_NAMES: tuple[str, ...] = (
@@ -61,6 +70,35 @@ PROBE_NAMES: tuple[str, ...] = (
     "database",
     "sentry",
 )
+
+# Defaults mirror reference/logs.sh so the Python port behaves identically out
+# of the box: 3-second cadence, 1440 iterations (~72 minutes), snapshot
+# analysis every 5 minutes, auto-generated run slug.
+DEFAULT_INTERVAL = 3
+DEFAULT_ITERATIONS = 1440
+DEFAULT_ANALYSE_EVERY = 300
+
+# `run_id` is interpolated into a filesystem path; the same character class as
+# the bash dispatcher so a hostile or careless value can't escape the
+# `logs/YYYYMMDD/HHMM_<slug>_<settings>/` layout.
+RUN_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]*$"
+RUN_ID_HELP = (
+    "run_id may only contain letters, numbers, dot, underscore, and hyphen,"
+    " and must start with a letter or number"
+)
+_RUN_ID_RE = re.compile(RUN_ID_PATTERN)
+
+
+def is_valid_run_id(value: str) -> bool:
+    """Return ``True`` if ``value`` is empty or matches :data:`RUN_ID_PATTERN`.
+
+    The CLI override path and the TOML loader both call this so a hostile
+    value supplied via ``--run-id`` can't slip past the validation that
+    :func:`_parse_monitor` enforces on the TOML side.
+    """
+    if not value:
+        return True
+    return bool(_RUN_ID_RE.match(value))
 
 
 class ConfigError(ValueError):
@@ -112,12 +150,29 @@ class SourceConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class MonitorConfig:
+    """Cadence, scope, and identity settings for ``paperbark monitor``.
+
+    All values are stored as plain ints (seconds for time fields) so the
+    dispatcher and animator never re-parse user input. ``iterations = 0`` runs
+    forever; ``analyse_every = 0`` disables snapshot analysis; ``run_id = ""``
+    triggers an auto-generated ``<adjective>-<colour>`` slug at run time.
+    """
+
+    interval: int = DEFAULT_INTERVAL
+    iterations: int = DEFAULT_ITERATIONS
+    analyse_every: int = DEFAULT_ANALYSE_EVERY
+    run_id: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class Config:
     """Parsed paperbark configuration."""
 
     root: Path = field(default_factory=lambda: Path(DEFAULT_ROOT))
     sources: tuple[SourceConfig, ...] = ()
     probes: ProbesConfig = field(default_factory=ProbesConfig)
+    monitor: MonitorConfig = field(default_factory=MonitorConfig)
 
     @classmethod
     def defaults(cls) -> Config:
@@ -183,6 +238,7 @@ def from_dict(raw: Mapping[str, Any]) -> Config:
         root=Path(root_raw),
         sources=_parse_sources(raw.get("sources")),
         probes=_parse_probes(raw.get("probes")),
+        monitor=_parse_monitor(raw.get("monitor")),
     )
 
 
@@ -252,6 +308,59 @@ def _parse_string_list(raw: Any, label: str) -> tuple[str, ...]:
             raise ConfigError(f"{label}[{index}] must be a string")
         items.append(item)
     return tuple(items)
+
+
+def _parse_monitor(raw: Any) -> MonitorConfig:
+    table = _expect_mapping(raw, "monitor")
+    interval = _parse_duration_field(
+        table.get("interval", DEFAULT_INTERVAL),
+        "[monitor].interval",
+        require_positive=True,
+    )
+    iterations_raw = table.get("iterations", DEFAULT_ITERATIONS)
+    if isinstance(iterations_raw, bool) or not isinstance(iterations_raw, int):
+        # bool is an int subclass; reject it explicitly so `iterations = true`
+        # fails closed instead of being read as `1`.
+        raise ConfigError(
+            f"[monitor].iterations must be an integer, got {type(iterations_raw).__name__}"
+        )
+    if iterations_raw < 0:
+        raise ConfigError("[monitor].iterations must be >= 0")
+    analyse_every = _parse_duration_field(
+        table.get("analyse_every", DEFAULT_ANALYSE_EVERY),
+        "[monitor].analyse_every",
+        require_positive=False,
+    )
+    run_id_raw = table.get("run_id", "")
+    if not isinstance(run_id_raw, str):
+        raise ConfigError(f"[monitor].run_id must be a string, got {type(run_id_raw).__name__}")
+    if not is_valid_run_id(run_id_raw):
+        raise ConfigError(f"[monitor].{RUN_ID_HELP}")
+    return MonitorConfig(
+        interval=interval,
+        iterations=iterations_raw,
+        analyse_every=analyse_every,
+        run_id=run_id_raw,
+    )
+
+
+def _parse_duration_field(value: Any, label: str, *, require_positive: bool) -> int:
+    """Validate a TOML duration field, accepting int seconds or shorthand strings.
+
+    Negative ints are already rejected inside :func:`parse_duration`, so this
+    helper only adds the optional ``require_positive`` rule (which rejects 0).
+    """
+    if isinstance(value, bool) or not isinstance(value, int | str):
+        raise ConfigError(
+            f"{label} must be an integer or duration string, got {type(value).__name__}"
+        )
+    try:
+        seconds = parse_duration(value)
+    except (ValueError, TypeError) as exc:
+        raise ConfigError(f"{label}: {exc}") from exc
+    if require_positive and seconds <= 0:
+        raise ConfigError(f"{label} must be > 0")
+    return seconds
 
 
 def _parse_pattern_overrides(raw: Any) -> dict[str, tuple[PatternOverride, ...]]:

@@ -30,6 +30,19 @@ STARTER_TOML = """\
 root = "logs"
 
 
+# `paperbark monitor` cadence and identity. CLI flags override these.
+[monitor]
+# Seconds between iterations. Accepts plain seconds or "30s"/"5m"/"1h".
+interval = 3
+# Total iterations to run. 0 = forever.
+iterations = 1440
+# Snapshot analyse cadence. 0 disables snapshots.
+analyse_every = "5m"
+# Run identifier. Empty = auto-generated <adjective>-<colour> slug.
+# Letters, numbers, '.', '_', '-' only; may not start with '.' or '-'.
+run_id = ""
+
+
 # Probe toggles. Set any to false to disable that probe entirely.
 [probes]
 severity = true
