@@ -1,0 +1,3 @@
+# Normalise line endings to LF on checkout regardless of platform.
+# Prevents prettier and ruff rewriting every file on Windows checkouts.
+* text=auto eol=lf
