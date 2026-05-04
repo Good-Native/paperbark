@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 from paperbark import __version__
 
 if TYPE_CHECKING:  # pragma: no cover — types only.
-    from paperbark.config import MonitorConfig
+    from paperbark.config import AnalyseConfig, Config, MonitorConfig, SearchConfig
     from paperbark.dispatcher import MonitorState, SnapshotRunner
 
 _NOT_IMPLEMENTED_EXIT = 2
@@ -73,49 +73,66 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Search across captured runs.",
     )
     search.add_argument(
+        "--config",
+        default=None,
+        help="Path to a paperbark.toml; overrides discovery.",
+    )
+    search.add_argument(
         "--keyword",
         action="append",
-        default=[],
-        help="Literal substring (repeatable).",
+        default=None,
+        help="Literal substring (repeatable). Overrides [search].keywords.",
     )
     search.add_argument(
         "--regex",
         action="append",
-        default=[],
-        help="Regex pattern (repeatable).",
+        default=None,
+        help="Regex pattern (repeatable). Overrides [search].regexes.",
     )
     search.add_argument(
         "--app",
-        default="",
-        help="Comma-separated app filter (default: all apps in run).",
+        default=None,
+        help="Comma-separated app filter. Overrides [search].app.",
     )
     search.add_argument(
         "--run",
         default=None,
-        help="'latest' (default), 'all', a date, or a run dir.",
+        help="'latest' (default), 'all', a date, or a run dir. Overrides [search].run.",
     )
     search.add_argument(
         "--root",
-        default="logs",
-        help="Logs root directory (default: logs).",
+        default=None,
+        help="Logs root directory. Overrides [paperbark].root.",
     )
-    search.add_argument(
+    # ``--ignore-case`` and ``--case-sensitive`` are now mutually exclusive and
+    # share the ``case_sensitive`` dest. Pre-PR ``--ignore-case`` only set
+    # ``args.ignore_case`` while ``paperbark.search.run`` consulted
+    # ``args.case_sensitive`` exclusively, so the flag was silently inert.
+    # That latent bug became user-visible once ``[search].case_sensitive``
+    # landed in the TOML loader: a TOML ``true`` plus a CLI ``--ignore-case``
+    # would have left case-sensitivity stuck on. The mutually exclusive group
+    # makes both flags participate in the same override path; ``default=None``
+    # on the parser keeps them distinguishable from explicit ``False``.
+    case_group = search.add_mutually_exclusive_group()
+    case_group.add_argument(
         "-i",
         "--ignore-case",
-        action="store_true",
-        default=True,
-        help="Match case-insensitively (default: on).",
+        dest="case_sensitive",
+        action="store_false",
+        help="Match case-insensitively. Overrides [search].case_sensitive.",
     )
-    search.add_argument(
+    case_group.add_argument(
         "--case-sensitive",
+        dest="case_sensitive",
         action="store_true",
-        help="Force case-sensitive matching (overrides --ignore-case).",
+        help="Force case-sensitive matching. Overrides [search].case_sensitive.",
     )
+    search.set_defaults(case_sensitive=None)
     search.add_argument(
         "--max",
         type=int,
-        default=0,
-        help="Stop after N total matches (0 = unlimited).",
+        default=None,
+        help="Stop after N total matches (0 = unlimited). Overrides [search].max.",
     )
 
     analyse = subparsers.add_parser(
@@ -123,41 +140,56 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Re-run analysis over an existing capture.",
     )
     analyse.add_argument(
+        "--config",
+        default=None,
+        help="Path to a paperbark.toml; overrides discovery.",
+    )
+    analyse.add_argument(
         "--run",
-        default="latest",
-        help="'latest' (default), 'all', a date, or a run dir.",
+        default=None,
+        help="'latest' (default), 'all', a date, or a run dir. Overrides [analyse].run.",
     )
     analyse.add_argument(
         "--root",
-        default="logs",
-        help="Logs root directory (default: logs).",
+        default=None,
+        help="Logs root directory. Overrides [paperbark].root.",
     )
     analyse.add_argument(
         "--app",
-        default="",
-        help="Comma-separated app filter (default: all apps in run).",
+        default=None,
+        help="Comma-separated app filter. Overrides [analyse].app.",
     )
     analyse.add_argument(
         "--keyword",
         action="append",
-        default=[],
-        help="Ad-hoc keyword (repeatable).",
+        default=None,
+        help="Ad-hoc keyword (repeatable). Overrides [analyse].keywords.",
     )
     analyse.add_argument(
         "--regex",
         action="append",
-        default=[],
-        help="Ad-hoc regex (repeatable).",
+        default=None,
+        help="Ad-hoc regex (repeatable). Overrides [analyse].regexes.",
     )
     analyse.add_argument(
         "--out",
         default=None,
         help="Override output base path; writes <out>.json + <out>.md.",
     )
+    # ``BooleanOptionalAction`` (3.9+) gives us ``--stdout`` and ``--no-stdout``
+    # off a single dest. Without the negative form a TOML
+    # ``[analyse].stdout = true`` could only be re-affirmed at the CLI, never
+    # cleared — which violates the documented "flags override TOML at
+    # runtime" contract. ``default=None`` keeps "flag absent" distinguishable
+    # from "explicit False" so the merge step falls through to TOML.
     analyse.add_argument(
         "--stdout",
-        action="store_true",
-        help="Print the rendered markdown to stdout in addition to writing files.",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Also print the rendered markdown to stdout. Overrides"
+            " [analyse].stdout; use --no-stdout to clear a TOML true."
+        ),
     )
 
     init = subparsers.add_parser(
@@ -185,10 +217,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     command = args.command or "monitor"
 
     if command == "search":
-        from paperbark.search import run as run_search
-
         try:
-            return run_search(args)
+            return _run_search(args)
         except KeyboardInterrupt:
             return 130
 
@@ -199,10 +229,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 130
 
     if command == "analyse":
-        from paperbark.analyse import run as run_analyse
-
         try:
-            return run_analyse(args)
+            return _run_analyse(args)
         except KeyboardInterrupt:
             return 130
 
@@ -213,6 +241,26 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     sys.stderr.write(f"paperbark {__version__}: '{command}' is not yet implemented.\n")
     return _NOT_IMPLEMENTED_EXIT
+
+
+def _load_config(args: argparse.Namespace) -> Config | int:
+    """Load the TOML config based on ``args.config`` (explicit path) or discovery.
+
+    Returns the parsed :class:`Config` on success or an exit code (``2``) when
+    the file is unreadable / malformed; the caller propagates the exit code so
+    the user sees the documented config-error stderr line. Pulled out of the
+    per-subcommand helpers so all three (monitor/analyse/search) report the
+    same way and don't drift.
+    """
+    from paperbark.config import ConfigError, load
+
+    config_arg = getattr(args, "config", None)
+    config_path = Path(config_arg) if config_arg else None
+    try:
+        return load(config_path)
+    except ConfigError as exc:
+        sys.stderr.write(f"config error: {exc}\n")
+        return 2
 
 
 def _run_monitor(args: argparse.Namespace) -> int:
@@ -230,16 +278,11 @@ def _run_monitor(args: argparse.Namespace) -> int:
 
     from paperbark.analyse import run as run_analyse
     from paperbark.animator import MonitorAnimator
-    from paperbark.config import ConfigError, load
     from paperbark.dispatcher import DispatcherError, run_monitor_loop
 
-    config_arg = getattr(args, "config", None)
-    config_path = Path(config_arg) if config_arg else None
-    try:
-        config = load(config_path)
-    except ConfigError as exc:
-        sys.stderr.write(f"config error: {exc}\n")
-        return 2
+    config = _load_config(args)
+    if isinstance(config, int):
+        return config
 
     try:
         monitor_cfg = _merge_monitor_overrides(config.monitor, args)
@@ -397,6 +440,196 @@ def _print_state_line(state: MonitorState) -> None:
     sys.stderr.write(
         f"iter {iter_part} elapsed={state.elapsed_seconds}s "
         f"captured={state.captured_total}{suffix}\n"
+    )
+
+
+def _run_analyse(args: argparse.Namespace) -> int:
+    """Glue between ``cli`` argparse and :func:`paperbark.analyse.run`.
+
+    Loads the TOML config, merges CLI flag overrides into
+    :class:`AnalyseConfig`, then builds the :class:`argparse.Namespace` that
+    the existing analyse runner consumes. Keeping the runner's Namespace API
+    intact means :func:`_make_snapshot_runner` (which constructs its own
+    Namespace from the dispatcher) doesn't need to change.
+    """
+    from paperbark.analyse import run as run_analyse
+
+    config = _load_config(args)
+    if isinstance(config, int):
+        return config
+
+    try:
+        analyse_cfg = _merge_analyse_overrides(config.analyse, args)
+    except ValueError as exc:
+        sys.stderr.write(f"analyse error: {exc}\n")
+        return 2
+
+    root = _resolve_root(config.root, args)
+    return run_analyse(
+        argparse.Namespace(
+            run=analyse_cfg.run,
+            root=str(root),
+            app=analyse_cfg.app,
+            keyword=list(analyse_cfg.keywords),
+            regex=list(analyse_cfg.regexes),
+            out=analyse_cfg.out or None,
+            stdout=analyse_cfg.stdout,
+        )
+    )
+
+
+def _run_search(args: argparse.Namespace) -> int:
+    """Glue between ``cli`` argparse and :func:`paperbark.search.run`.
+
+    Same shape as :func:`_run_analyse`: load → merge → reify a Namespace that
+    matches the search runner's existing contract. Search has no
+    :class:`None`-friendly default for ``--run``, so an empty string falls
+    through and :func:`paperbark.search.resolve_runs` resolves it to "latest".
+    """
+    from paperbark.search import run as run_search
+
+    config = _load_config(args)
+    if isinstance(config, int):
+        return config
+
+    try:
+        search_cfg = _merge_search_overrides(config.search, args)
+    except ValueError as exc:
+        sys.stderr.write(f"search error: {exc}\n")
+        return 2
+
+    root = _resolve_root(config.root, args)
+    # ``paperbark.search.run`` consults ``args.case_sensitive`` exclusively,
+    # so we don't carry a redundant ``ignore_case`` field on the Namespace.
+    # The ``--ignore-case`` CLI flag now writes to ``case_sensitive=False``
+    # via the mutex group in :func:`_build_parser`.
+    return run_search(
+        argparse.Namespace(
+            run=search_cfg.run,
+            root=str(root),
+            app=search_cfg.app,
+            keyword=list(search_cfg.keywords),
+            regex=list(search_cfg.regexes),
+            case_sensitive=search_cfg.case_sensitive,
+            max=search_cfg.max,
+        )
+    )
+
+
+def _resolve_root(base: Path, args: argparse.Namespace) -> Path:
+    """``--root`` overrides ``[paperbark].root`` for this invocation only."""
+    root_arg = getattr(args, "root", None)
+    return Path(root_arg) if root_arg else base
+
+
+def _merge_analyse_overrides(
+    base: AnalyseConfig,
+    args: argparse.Namespace,
+) -> AnalyseConfig:
+    """Apply ``args`` overrides to ``base``, preserving defaults for unset flags.
+
+    ``--keyword`` / ``--regex`` use ``argparse`` ``action="append"`` with
+    ``default=None`` so we can tell "user supplied none" (None → keep TOML)
+    apart from "user supplied an empty list" (impossible with append, so the
+    fall-through to TOML is consistent). ``--out`` stays a CLI-only override
+    when supplied; an empty TOML value means "use the default
+    ``<run>/analysis`` base path".
+    """
+    from paperbark.config import AnalyseConfig
+
+    run_value = base.run
+    app = base.app
+    keywords = base.keywords
+    regexes = base.regexes
+    out = base.out
+    stdout = base.stdout
+
+    run_arg = getattr(args, "run", None)
+    if run_arg is not None:
+        run_value = run_arg
+
+    app_arg = getattr(args, "app", None)
+    if app_arg is not None:
+        app = app_arg
+
+    keyword_arg = getattr(args, "keyword", None)
+    if keyword_arg is not None:
+        keywords = tuple(keyword_arg)
+
+    regex_arg = getattr(args, "regex", None)
+    if regex_arg is not None:
+        regexes = tuple(regex_arg)
+
+    out_arg = getattr(args, "out", None)
+    if out_arg is not None:
+        out = out_arg
+
+    stdout_arg = getattr(args, "stdout", None)
+    if stdout_arg is not None:
+        stdout = bool(stdout_arg)
+
+    return AnalyseConfig(
+        run=run_value,
+        app=app,
+        keywords=keywords,
+        regexes=regexes,
+        out=out,
+        stdout=stdout,
+    )
+
+
+def _merge_search_overrides(
+    base: SearchConfig,
+    args: argparse.Namespace,
+) -> SearchConfig:
+    """Apply ``args`` overrides to ``base``, preserving defaults for unset flags.
+
+    ``--max`` validation matches the TOML loader (>= 0; 0 = unlimited) so a
+    hostile or careless ``--max -1`` fails fast rather than silently being
+    treated as unlimited by ``paperbark.search``.
+    """
+    from paperbark.config import SearchConfig
+
+    run_value = base.run
+    app = base.app
+    keywords = base.keywords
+    regexes = base.regexes
+    case_sensitive = base.case_sensitive
+    max_matches = base.max
+
+    run_arg = getattr(args, "run", None)
+    if run_arg is not None:
+        run_value = run_arg
+
+    app_arg = getattr(args, "app", None)
+    if app_arg is not None:
+        app = app_arg
+
+    keyword_arg = getattr(args, "keyword", None)
+    if keyword_arg is not None:
+        keywords = tuple(keyword_arg)
+
+    regex_arg = getattr(args, "regex", None)
+    if regex_arg is not None:
+        regexes = tuple(regex_arg)
+
+    case_sensitive_arg = getattr(args, "case_sensitive", None)
+    if case_sensitive_arg is not None:
+        case_sensitive = bool(case_sensitive_arg)
+
+    max_arg = getattr(args, "max", None)
+    if max_arg is not None:
+        if max_arg < 0:
+            raise ValueError("--max must be >= 0 (0 = unlimited)")
+        max_matches = max_arg
+
+    return SearchConfig(
+        run=run_value,
+        app=app,
+        keywords=keywords,
+        regexes=regexes,
+        case_sensitive=case_sensitive,
+        max=max_matches,
     )
 
 

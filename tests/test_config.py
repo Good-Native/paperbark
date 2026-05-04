@@ -10,11 +10,13 @@ from paperbark.config import (
     DEFAULT_ANALYSE_EVERY,
     DEFAULT_INTERVAL,
     DEFAULT_ITERATIONS,
+    AnalyseConfig,
     Config,
     ConfigError,
     MonitorConfig,
     PatternOverride,
     ProbesConfig,
+    SearchConfig,
     SourceConfig,
     discover,
     from_dict,
@@ -360,3 +362,121 @@ def test_monitor_run_id_accepts_safe_chars() -> None:
 def test_monitor_section_must_be_table() -> None:
     with pytest.raises(ConfigError, match=r"\[monitor\] must be a table"):
         from_dict({"monitor": [1, 2, 3]})
+
+
+# --- analyse ---------------------------------------------------------------
+
+
+def test_analyse_defaults_match_argparse_surface() -> None:
+    config = Config.defaults()
+    assert config.analyse == AnalyseConfig(
+        run="latest",
+        app="",
+        keywords=(),
+        regexes=(),
+        out="",
+        stdout=False,
+    )
+
+
+def test_from_dict_parses_analyse_section() -> None:
+    config = from_dict(
+        {
+            "analyse": {
+                "run": "all",
+                "app": "web,worker",
+                "keywords": ["panic"],
+                "regexes": [r"err\d+"],
+                "out": "reports/today",
+                "stdout": True,
+            },
+        }
+    )
+    assert config.analyse == AnalyseConfig(
+        run="all",
+        app="web,worker",
+        keywords=("panic",),
+        regexes=(r"err\d+",),
+        out="reports/today",
+        stdout=True,
+    )
+
+
+@pytest.mark.parametrize("field", ["run", "app", "out"])
+def test_analyse_string_field_must_be_string(field: str) -> None:
+    with pytest.raises(ConfigError, match=rf"\[analyse\]\.{field}"):
+        from_dict({"analyse": {field: 42}})
+
+
+def test_analyse_stdout_must_be_bool() -> None:
+    with pytest.raises(ConfigError, match=r"\[analyse\]\.stdout must be a boolean"):
+        from_dict({"analyse": {"stdout": "yes"}})
+
+
+def test_analyse_keywords_must_be_strings() -> None:
+    with pytest.raises(ConfigError, match=r"\[analyse\]\.keywords"):
+        from_dict({"analyse": {"keywords": ["ok", 7]}})
+
+
+def test_analyse_section_must_be_table() -> None:
+    with pytest.raises(ConfigError, match=r"\[analyse\] must be a table"):
+        from_dict({"analyse": [1, 2, 3]})
+
+
+# --- search ----------------------------------------------------------------
+
+
+def test_search_defaults_match_argparse_surface() -> None:
+    config = Config.defaults()
+    assert config.search == SearchConfig(
+        run="latest",
+        app="",
+        keywords=(),
+        regexes=(),
+        case_sensitive=False,
+        max=0,
+    )
+
+
+def test_from_dict_parses_search_section() -> None:
+    config = from_dict(
+        {
+            "search": {
+                "run": "20260503",
+                "app": "web",
+                "keywords": ["panic"],
+                "regexes": [r"5\d\d"],
+                "case_sensitive": True,
+                "max": 50,
+            },
+        }
+    )
+    assert config.search == SearchConfig(
+        run="20260503",
+        app="web",
+        keywords=("panic",),
+        regexes=(r"5\d\d",),
+        case_sensitive=True,
+        max=50,
+    )
+
+
+def test_search_max_rejects_negative() -> None:
+    with pytest.raises(ConfigError, match=r"\[search\]\.max must be >= 0"):
+        from_dict({"search": {"max": -1}})
+
+
+def test_search_max_rejects_bool() -> None:
+    # bool is an int subclass; `max = true` would otherwise silently cap at 1.
+    with pytest.raises(ConfigError, match=r"\[search\]\.max must be an integer"):
+        from_dict({"search": {"max": True}})
+
+
+def test_search_case_sensitive_must_be_bool() -> None:
+    with pytest.raises(ConfigError, match=r"\[search\]\.case_sensitive must be a boolean"):
+        from_dict({"search": {"case_sensitive": "no"}})
+
+
+def test_search_section_must_be_table() -> None:
+    with pytest.raises(ConfigError, match=r"\[search\] must be a table"):
+        from_dict({"search": [1, 2]})

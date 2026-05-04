@@ -43,6 +43,37 @@ analyse_every = "5m"
 run_id = ""
 
 
+# `paperbark analyse` defaults. CLI flags override these.
+[analyse]
+# Run selector: "latest", "all", "<date>", or "<date>/<runname>".
+run = "latest"
+# Comma-separated app filter. Empty = every app under the run.
+app = ""
+# Ad-hoc keyword/regex matchers added on top of the default probe set.
+keywords = []
+regexes = []
+# Override output base path (writes <out>.json + <out>.md). Empty =
+# write <run>/analysis.{json,md} as usual.
+out = ""
+# Also print rendered markdown to stdout in addition to writing files.
+stdout = false
+
+
+# `paperbark search` defaults. CLI flags override these.
+[search]
+# Run selector grammar matches [analyse].run.
+run = "latest"
+app = ""
+# Repeatable keyword/regex matchers; supply at least one at run time.
+keywords = []
+regexes = []
+# Case-sensitive matching (default off). Either --case-sensitive or
+# --ignore-case on the CLI overrides this value at runtime.
+case_sensitive = false
+# Stop after N total matches (0 = unlimited).
+max = 0
+
+
 # Probe toggles. Set any to false to disable that probe entirely.
 [probes]
 severity = true
