@@ -38,24 +38,25 @@ end. Findings — the per-label rollups every regex-bucket-style probe emits
 }
 ```
 
-The four keys `count`, `first_seen`, `last_seen`, and `peak` are the
-public contract; `peak_count` and `samples` are conveniences. Non-bucket
-probes (`Latency`, `Heartbeat`) emit shapes documented per-probe below.
+The five keys `label`, `count`, `first_seen`, `last_seen`, and `peak`
+are the public contract; `peak_count` and `samples` are conveniences.
+Non-bucket probes (`Latency`, `Heartbeat`) emit shapes documented
+per-probe below.
 
 ## The canonical record
 
 Probes never branch on the source. The format adapter turns each raw line
 into:
 
-| Field         | Type            | Notes                                                                         |
-| ------------- | --------------- | ----------------------------------------------------------------------------- |
-| `timestamp`   | `str`           | ISO-8601 with offset; empty when no timestamp could be extracted.             |
-| `level`       | `str`           | Lower-cased; one of the known levels or empty.                                |
-| `message`     | `str`           |                                                                               |
-| `component`   | `str`           |                                                                               |
-| `status`      | `str`           | Three-digit HTTP status, or empty.                                            |
+| Field         | Type            | Notes                                                                           |
+| ------------- | --------------- | ------------------------------------------------------------------------------- |
+| `timestamp`   | `str`           | ISO-8601 with offset; empty when no timestamp could be extracted.               |
+| `level`       | `str`           | Lower-cased; one of the known levels or empty.                                  |
+| `message`     | `str`           |                                                                                 |
+| `component`   | `str`           |                                                                                 |
+| `status`      | `str`           | Three-digit HTTP status, or empty.                                              |
 | `duration_ms` | `float \| None` | Explicit `*_ms` keys honoured; bare `duration` is read as Go-style nanoseconds. |
-| `raw_line`    | `str`           | Original line; regex-style probes match against this, not the parsed JSON.    |
+| `raw_line`    | `str`           | Original line; regex-style probes match against this, not the parsed JSON.      |
 
 `parse_line` lives in
 [`src/paperbark/probes/_record.py`](../src/paperbark/probes/_record.py).
@@ -124,52 +125,52 @@ When no timestamped traffic was captured the report is
 Fly-flavoured process lifecycle vocabulary on the raw line. Default
 labels:
 
-| Label                 | Pattern                                  |
-| --------------------- | ---------------------------------------- |
-| `starting machine`    | `starting machine`                       |
-| `stopping machine`    | `stopping machine`                       |
-| `exited with code`    | `exited with code\s+\d+`                 |
-| `out of memory`       | `out of memory\|oom[- ]?killed`          |
-| `killed by signal`    | `killed by signal\|signal:\s*killed`     |
-| `health check failed` | `health check.*fail`                     |
-| `restart`             | `\brestart(ing)?\b`                      |
+| Label                 | Pattern                              |
+| --------------------- | ------------------------------------ |
+| `starting machine`    | `starting machine`                   |
+| `stopping machine`    | `stopping machine`                   |
+| `exited with code`    | `exited with code\s+\d+`             |
+| `out of memory`       | `out of memory\|oom[- ]?killed`      |
+| `killed by signal`    | `killed by signal\|signal:\s*killed` |
+| `health check failed` | `health check.*fail`                 |
+| `restart`             | `\brestart(ing)?\b`                  |
 
 Replace the entire set under
 `[probes.patterns].process_health` for non-Fly platforms.
 
 ### `Autoscaler` — toggle `autoscaler`
 
-| Label          | Pattern                                          |
-| -------------- | ------------------------------------------------ |
-| `reconciling`  | `"msg":\s*"reconciling"\|reconciling\s+app`      |
-| `scale up`     | `scal(e\|ing)\s*up\|adding machine`              |
-| `scale down`   | `scal(e\|ing)\s*down\|removing machine`          |
-| `target=N`     | `target\s*[=:]\s*\d+\|"target":\s*\{`            |
-| `queue depth`  | `queue[_ ]depth\|backlog\s*[=:]\s*\d+`           |
-| `no-op`        | `no scale change\|already at target`             |
+| Label         | Pattern                                     |
+| ------------- | ------------------------------------------- |
+| `reconciling` | `"msg":\s*"reconciling"\|reconciling\s+app` |
+| `scale up`    | `scal(e\|ing)\s*up\|adding machine`         |
+| `scale down`  | `scal(e\|ing)\s*down\|removing machine`     |
+| `target=N`    | `target\s*[=:]\s*\d+\|"target":\s*\{`       |
+| `queue depth` | `queue[_ ]depth\|backlog\s*[=:]\s*\d+`      |
+| `no-op`       | `no scale change\|already at target`        |
 
 Replace under `[probes.patterns].autoscaler`.
 
 ### `Database / external` — toggle `database`
 
-| Label                       | Pattern                       |
-| --------------------------- | ----------------------------- |
-| `pgx error`                 | `\bpgx\b.*error\|pgx:.*`      |
-| `pq error`                  | `\bpq:\s`                     |
-| `connection refused`        | `connection refused`          |
-| `context deadline exceeded` | `context deadline exceeded`   |
-| `i/o timeout`               | `i/o timeout`                 |
-| `connection reset`          | `connection reset`            |
-| `too many connections`      | `too many connections`        |
+| Label                       | Pattern                     |
+| --------------------------- | --------------------------- |
+| `pgx error`                 | `\bpgx\b.*error\|pgx:.*`    |
+| `pq error`                  | `\bpq:\s`                   |
+| `connection refused`        | `connection refused`        |
+| `context deadline exceeded` | `context deadline exceeded` |
+| `i/o timeout`               | `i/o timeout`               |
+| `connection reset`          | `connection reset`          |
+| `too many connections`      | `too many connections`      |
 
 Replace under `[probes.patterns].database`.
 
 ### `Sentry` — toggle `sentry`
 
-| Label         | Pattern                                  |
-| ------------- | ---------------------------------------- |
-| `event sent`  | `sentry.*event\b\|event sent to sentry`  |
-| `send failed` | `sentry.*(?:fail\|error)`                |
+| Label         | Pattern                                 |
+| ------------- | --------------------------------------- |
+| `event sent`  | `sentry.*event\b\|event sent to sentry` |
+| `send failed` | `sentry.*(?:fail\|error)`               |
 
 Replace under `[probes.patterns].sentry`.
 

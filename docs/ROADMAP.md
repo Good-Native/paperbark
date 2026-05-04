@@ -6,11 +6,12 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 ## Current state
 
 - **Last verified:** 2026-05-04
-- **Latest commit:** `Add docs/SOURCES.md source interface reference (#11)`
-  on `main` (`48e4a9d`). `docs/PROBES.md` lands next.
+- **Latest commit:** `Reject unknown source option keys (#12)`
+  on `main` (`a99953b`). `docs/PROBES.md` and the `[probes]` runtime
+  wiring land next via PR #13.
 - **Repo:** <https://github.com/Good-Native/paperbark>
 - **Released:** nothing yet (version stub `0.0.0`).
-- **Tests:** 363 passing across 26 test modules; CI has been green on
+- **Tests:** 380 passing across 27 test modules; CI has been green on
   every push since the `Land uv.lock and unblock CI` change.
 
 ### Implementation status
@@ -36,9 +37,10 @@ the run root when the loop ends. The `.gitattributes` LF baseline
 landed direct-to-`main` in `644a4f4`. PR #9 threaded `[analyse]` and
 `[search]` through the TOML loader, so every CLI flag for those
 subcommands is also a TOML key. PRs #10 and #11 filled in
-`docs/CONFIG.md` and `docs/SOURCES.md`. Remaining shortlist:
-`docs/PROBES.md`, then release prep (PyPI reservation, version bump
-from `0.0.0`, Homebrew formula).
+`docs/CONFIG.md` and `docs/SOURCES.md`; PR #13 added `docs/PROBES.md`,
+wired `[probes]` toggles and `[probes.patterns]` overrides through to
+the runtime, and retired `reference/`. Remaining shortlist: release
+prep (PyPI reservation, version bump from `0.0.0`, Homebrew formula).
 
 ### Scaffold (done)
 
@@ -62,8 +64,6 @@ from `0.0.0`, Homebrew formula).
 - **Remote uses HTTPS**, not SSH — the user's local SSH identity isn't
   registered against the `Good-Native` org. Pushes go via `gh`'s
   credential helper. Optional follow-up: register an SSH key.
-- **Code-of-conduct contact** is a placeholder
-  (`conduct@good-native.dev`). Replace before announcing publicly.
 - **Direct-to-main commits before PR #1** never went through the
   CodeRabbit bot (only the search PR did). The CLI is installed in
   WSL; running `coderabbit review --type committed --base-commit
