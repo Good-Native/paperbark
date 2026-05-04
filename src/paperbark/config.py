@@ -84,7 +84,7 @@ DEFAULT_ANALYSE_EVERY = 300
 RUN_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]*$"
 RUN_ID_HELP = (
     "run_id may only contain letters, numbers, dot, underscore, and hyphen,"
-    " and may not start with '.' or '-'"
+    " and must start with a letter or number"
 )
 _RUN_ID_RE = re.compile(RUN_ID_PATTERN)
 
