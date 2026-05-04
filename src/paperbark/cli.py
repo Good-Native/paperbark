@@ -334,6 +334,13 @@ def _merge_monitor_overrides(
 
     run_id_arg = getattr(args, "run_id", None)
     if run_id_arg is not None:
+        from paperbark.config import RUN_ID_HELP, is_valid_run_id
+
+        # The TOML path validates run_id against the same regex; the CLI
+        # override path used to skip it, which let `--run-id ../escape`
+        # silently bypass the path-safety check we apply via TOML.
+        if not is_valid_run_id(run_id_arg):
+            raise ValueError(f"--run-id: {RUN_ID_HELP}")
         run_id = run_id_arg
 
     return MonitorConfig(
@@ -368,7 +375,13 @@ def _make_snapshot_runner(
             out=str(out_base) if out_base is not None else None,
             stdout=False,
         )
-        run_analyse(ns)
+        # ``run_analyse`` reports soft failures (e.g. "no app dirs with raw
+        # logs") via a non-zero return without raising. Convert that to an
+        # exception so the dispatcher's ``snapshot_runner`` try/except logs
+        # the failure to monitor.log instead of treating it as success.
+        rc = run_analyse(ns)
+        if rc != 0:
+            raise RuntimeError(f"paperbark analyse exited with code {rc}")
 
     return _run
 

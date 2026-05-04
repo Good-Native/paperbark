@@ -92,10 +92,24 @@ def test_render_status_cycles_through_spinner_frames() -> None:
     assert seen == set(SPINNER_FRAMES)
 
 
+def _wait_for(buf: io.StringIO, needle: str, *, timeout: float = 2.0) -> None:
+    """Poll ``buf`` until ``needle`` appears or ``timeout`` elapses.
+
+    Replaces a fixed ``time.sleep`` so a busy CI runner can take its time
+    starting the redraw thread without the test failing intermittently.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if needle in buf.getvalue():
+            return
+        time.sleep(0.01)
+    raise AssertionError(f"timed out waiting for {needle!r}; got {buf.getvalue()!r}")
+
+
 def test_monitor_animator_smoke_renders_to_console() -> None:
-    # The Live thread runs at default fps; we sleep just long enough for one
-    # tick + the immediate update to land. force_terminal makes Live actually
-    # render even though our file is a StringIO rather than a real TTY.
+    # ``MonitorAnimator.update`` forces an immediate redraw, so the smoke check
+    # only needs to wait until the publish-side render lands in the buffer.
+    # ``force_terminal=True`` makes Live actually render against a StringIO.
     buf = io.StringIO()
     console = Console(file=buf, force_terminal=True, width=120, color_system=None)
     state = MonitorState(
@@ -107,7 +121,7 @@ def test_monitor_animator_smoke_renders_to_console() -> None:
     )
     with MonitorAnimator(console, fps=20) as ticker:
         ticker.update(state)
-        time.sleep(0.15)  # let the redraw thread tick at least twice
+        _wait_for(buf, "3 / 10")
     output = buf.getvalue()
     assert "3 / 10" in output
     assert "99" in output
@@ -119,6 +133,6 @@ def test_monitor_animator_can_be_used_without_publishing_state() -> None:
     buf = io.StringIO()
     console = Console(file=buf, force_terminal=True, width=120, color_system=None)
     with MonitorAnimator(console, fps=20):
-        time.sleep(0.1)
+        _wait_for(buf, "starting")
     output = buf.getvalue()
     assert "starting" in output

@@ -81,7 +81,24 @@ DEFAULT_ANALYSE_EVERY = 300
 # `run_id` is interpolated into a filesystem path; the same character class as
 # the bash dispatcher so a hostile or careless value can't escape the
 # `logs/YYYYMMDD/HHMM_<slug>_<settings>/` layout.
-_RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+RUN_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]*$"
+RUN_ID_HELP = (
+    "run_id may only contain letters, numbers, dot, underscore, and hyphen,"
+    " and may not start with '.' or '-'"
+)
+_RUN_ID_RE = re.compile(RUN_ID_PATTERN)
+
+
+def is_valid_run_id(value: str) -> bool:
+    """Return ``True`` if ``value`` is empty or matches :data:`RUN_ID_PATTERN`.
+
+    The CLI override path and the TOML loader both call this so a hostile
+    value supplied via ``--run-id`` can't slip past the validation that
+    :func:`_parse_monitor` enforces on the TOML side.
+    """
+    if not value:
+        return True
+    return bool(_RUN_ID_RE.match(value))
 
 
 class ConfigError(ValueError):
@@ -313,15 +330,13 @@ def _parse_monitor(raw: Any) -> MonitorConfig:
         table.get("analyse_every", DEFAULT_ANALYSE_EVERY),
         "[monitor].analyse_every",
         require_positive=False,
+        require_non_negative=True,
     )
     run_id_raw = table.get("run_id", "")
     if not isinstance(run_id_raw, str):
         raise ConfigError(f"[monitor].run_id must be a string, got {type(run_id_raw).__name__}")
-    if run_id_raw and not _RUN_ID_RE.match(run_id_raw):
-        raise ConfigError(
-            "[monitor].run_id may only contain letters, numbers, dot, underscore,"
-            " and hyphen, and may not start with '.' or '-'"
-        )
+    if not is_valid_run_id(run_id_raw):
+        raise ConfigError(f"[monitor].{RUN_ID_HELP}")
     return MonitorConfig(
         interval=interval,
         iterations=iterations_raw,
@@ -330,8 +345,19 @@ def _parse_monitor(raw: Any) -> MonitorConfig:
     )
 
 
-def _parse_duration_field(value: Any, label: str, *, require_positive: bool) -> int:
-    """Validate a TOML duration field, accepting int seconds or shorthand strings."""
+def _parse_duration_field(
+    value: Any,
+    label: str,
+    *,
+    require_positive: bool,
+    require_non_negative: bool = False,
+) -> int:
+    """Validate a TOML duration field, accepting int seconds or shorthand strings.
+
+    ``require_positive`` rejects ``0``; ``require_non_negative`` only rejects
+    negative integers (negatives slip past :func:`parse_duration` itself when
+    they are passed as ints, since the parser short-circuits on the int form).
+    """
     if isinstance(value, bool) or not isinstance(value, int | str):
         raise ConfigError(
             f"{label} must be an integer or duration string, got {type(value).__name__}"
@@ -342,6 +368,8 @@ def _parse_duration_field(value: Any, label: str, *, require_positive: bool) -> 
         raise ConfigError(f"{label}: {exc}") from exc
     if require_positive and seconds <= 0:
         raise ConfigError(f"{label} must be > 0")
+    if require_non_negative and seconds < 0:
+        raise ConfigError(f"{label} must be >= 0")
     return seconds
 
 

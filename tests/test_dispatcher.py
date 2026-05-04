@@ -575,17 +575,19 @@ def test_run_monitor_loop_swallows_snapshot_runner_errors(tmp_path: Path) -> Non
 def test_run_monitor_loop_logs_overrun_warning(tmp_path: Path) -> None:
     fixed = datetime(2026, 5, 3, 14, 30, 45, tzinfo=UTC)
     cfg = Config(root=tmp_path / "logs", sources=(SourceConfig(name="api", type="flyctl"),))
-    monitor = _build_monitor_config(interval=1, iterations=1, analyse_every=0)
+    # Two iterations so the loop reaches the remaining-budget check after iter 1
+    # (with iterations=1 the loop breaks before computing remaining).
+    monitor = _build_monitor_config(interval=1, iterations=2, analyse_every=0)
 
     mono = _FakeMonotonic()
 
-    # Advance the clock by more than `interval` between iter_start and post-iter
-    # so the overrun branch triggers. on_state fires after the elapsed read,
-    # but before the remaining-budget check, so jumping the clock here works.
+    # Advance the clock by more than ``interval`` between iter_start and the
+    # post-iter remaining-budget check so the overrun branch triggers. on_state
+    # fires before that check, so advancing here simulates a slow iteration.
     def _on_state(_s: MonitorState) -> None:
         mono.advance(5)
 
-    run_monitor_loop(
+    result = run_monitor_loop(
         cfg,
         monitor=monitor,
         built_sources=[("api", _FakeSource(_scripted_lines()))],
@@ -594,3 +596,5 @@ def test_run_monitor_loop_logs_overrun_warning(tmp_path: Path) -> None:
         monotonic=mono,
         clock=lambda: fixed,
     )
+    log_text = (result.run_dir / "monitor.log").read_text(encoding="utf-8")
+    assert "running back-to-back" in log_text

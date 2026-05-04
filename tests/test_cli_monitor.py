@@ -90,6 +90,21 @@ def test_merge_rejects_negative_iterations() -> None:
         _merge_monitor_overrides(MonitorConfig(), _ns(iterations=-1))
 
 
+@pytest.mark.parametrize("bad", ["../escape", "with/slash", ".hidden", "-leading"])
+def test_merge_rejects_unsafe_run_id(bad: str) -> None:
+    # The TOML loader validates run_id against a path-safety regex; the CLI
+    # override path has to enforce the same rule or the same hostile value
+    # slips through ``--run-id``.
+    with pytest.raises(ValueError, match="--run-id"):
+        _merge_monitor_overrides(MonitorConfig(), _ns(run_id=bad))
+
+
+def test_merge_accepts_safe_run_id() -> None:
+    base = MonitorConfig()
+    result = _merge_monitor_overrides(base, _ns(run_id="incident_2026-05-04.v1"))
+    assert result.run_id == "incident_2026-05-04.v1"
+
+
 # --- snapshot runner -------------------------------------------------------
 
 
@@ -129,6 +144,20 @@ def test_snapshot_runner_passes_none_for_final_analyse(tmp_path: Path) -> None:
     run_dir.mkdir(parents=True)
     runner(run_dir, None)
     assert captured[0].out is None
+
+
+def test_snapshot_runner_raises_on_non_zero_exit(tmp_path: Path) -> None:
+    """A soft analyse failure (return code, not exception) must propagate.
+
+    Without this raise the dispatcher's ``snapshot_runner`` try/except would
+    silently treat the failure as success — analyse.run uses non-zero exit
+    codes for "no app dirs with raw logs" and similar soft errors.
+    """
+    runner = _make_snapshot_runner(tmp_path, lambda _ns: 2)
+    run_dir = tmp_path / "20260503" / "1430_test"
+    run_dir.mkdir(parents=True)
+    with pytest.raises(RuntimeError, match="exited with code 2"):
+        runner(run_dir, None)
 
 
 # --- _print_state_line -----------------------------------------------------

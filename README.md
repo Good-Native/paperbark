@@ -36,8 +36,8 @@ paperbark init
 # capture and analyse using config defaults (3s cadence, ~72 minutes)
 paperbark monitor
 
-# tighter cadence, fixed run id, snapshots every 30s
-paperbark monitor --interval 5s --run-id incident-pr349 --analyse-every 30s
+# custom cadence, fixed run id, snapshots every 30s
+paperbark monitor --interval 1s --run-id incident-pr349 --analyse-every 30s
 
 # capture forever; press Ctrl+C to write the final report and exit
 paperbark monitor --iterations 0
