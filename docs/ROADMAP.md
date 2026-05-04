@@ -38,10 +38,11 @@ the run root when the loop ends. The `.gitattributes` LF baseline
 landed direct-to-`main` in `644a4f4`. PR #9 threaded `[analyse]` and
 `[search]` through the TOML loader, so every CLI flag for those
 subcommands is also a TOML key. PRs #10 and #11 filled in
-`docs/CONFIG.md` and `docs/SOURCES.md`; PR #13 added `docs/PROBES.md`,
-wired `[probes]` toggles and `[probes.patterns]` overrides through to
-the runtime, and retired `reference/`. Remaining shortlist: release
-prep (PyPI reservation, version bump from `0.0.0`, Homebrew formula).
+`docs/CONFIG.md` and `docs/SOURCES.md`; PR #13 (in review) adds
+`docs/PROBES.md`, wires `[probes]` toggles and `[probes.patterns]`
+overrides through to the runtime, and retires `reference/`. Remaining
+shortlist after PR #13: release prep (PyPI reservation, version bump
+from `0.0.0`, Homebrew formula).
 
 ### Scaffold (done)
 
