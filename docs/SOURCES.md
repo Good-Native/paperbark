@@ -1,0 +1,226 @@
+# Source reference
+
+A **source** is one upstream system paperbark captures log lines from
+(Fly.io, Cloudflare Workers, a file on disk, etc.). The interface is
+deliberately small: a source yields raw lines, and that's it. Cursor
+filtering, dedup, parsing, probing, and aggregation all happen
+downstream so source authors can ignore them.
+
+The interface lives in
+[`src/paperbark/sources/__init__.py`](../src/paperbark/sources/__init__.py).
+Built-in sources sit alongside it under `src/paperbark/sources/`.
+
+## Status
+
+| Source                  | Module                                                    | Status                   |
+| ----------------------- | --------------------------------------------------------- | ------------------------ |
+| Fly.io (`flyctl logs`)  | [`flyctl.py`](../src/paperbark/sources/flyctl.py)         | implemented              |
+| Cloudflare (`wrangler`) | [`wrangler.py`](../src/paperbark/sources/wrangler.py)     | stub (raises on capture) |
+| Kubernetes (`kubectl`)  | [`kubectl.py`](../src/paperbark/sources/kubectl.py)       | stub (raises on capture) |
+| AWS CloudWatch          | [`cloudwatch.py`](../src/paperbark/sources/cloudwatch.py) | stub (raises on capture) |
+| Plain files             | [`file.py`](../src/paperbark/sources/file.py)             | stub (raises on capture) |
+| stdin                   | [`stdin.py`](../src/paperbark/sources/stdin.py)           | stub (raises on capture) |
+
+Stubs satisfy the `Source` Protocol so the config layer can resolve a
+`type = "wrangler"` (etc.) entry at parse time, but
+`capture()` raises `NotImplementedError` until a real implementation
+lands. This keeps `paperbark init` and the TOML loader honest — a typo
+in `type` fails fast — without forcing every adapter to ship in v1.
+
+## The `Source` Protocol
+
+```python
+from collections.abc import Iterator
+from typing import Protocol, runtime_checkable
+
+
+@runtime_checkable
+class Source(Protocol):
+    name: str
+
+    def capture(self, *, since: str = "") -> Iterator[str]:
+        ...
+```
+
+Two members and a contract:
+
+- **`name`** is a class attribute: a short identifier (`"flyctl"`,
+  `"wrangler"`) used by the registry and matched against `type` in
+  TOML. Per-instance labels (the dir name under each run) come from the
+  TOML `name` field on each `[[sources]]` entry, not from this
+  attribute.
+- **`capture(since="")`** returns an iterator of raw lines. Each call
+  starts a fresh capture; the source must not retain state across
+  calls. Yielding lazily is fine and encouraged — the dispatcher
+  drains the iterator and writes lines through to the cursor filter.
+- **`since`** is an advisory ISO-8601 timestamp the source may pass to
+  the upstream tool when it supports a native `--since` (or
+  equivalent). It is a hint, not a guarantee: the cursor filter
+  downstream will trim anything older regardless. Sources whose
+  upstream does not accept a since flag (e.g. `flyctl logs`) should
+  ignore it without erroring.
+
+## Mandatory cursor filter
+
+Every source's output flows through
+[`paperbark.cursor`](../src/paperbark/cursor.py) before it reaches
+disk. This is non-negotiable: at least one source (`flyctl logs
+--no-tail`) returns the same recent window on every call, so per-run
+overlap is guaranteed. Source authors **never** dedup their own output
+— the cursor filter is the single chokepoint, and double-filtering
+would just hide bugs.
+
+In practice this means a source is allowed to emit duplicate lines
+across iterations. The cursor records the last-seen ISO timestamp per
+app under `<run>/<app>/.cursor` and skips anything that doesn't
+strictly advance it.
+
+## Registry
+
+`registered_sources()` in `src/paperbark/sources/__init__.py` returns
+the `name → class` map the config layer uses to resolve `type`. A
+source is wired up by:
+
+1. Adding the module under `src/paperbark/sources/`.
+2. Importing the class at the top of `src/paperbark/sources/__init__.py`.
+3. Adding it to the `__all__` list and to `registered_sources()`.
+
+Construction is handled by
+[`paperbark.dispatcher.build_source`](../src/paperbark/dispatcher.py),
+which dispatches on `spec.type` and forwards the relevant options from
+each `[[sources]]` table to the constructor. New sources need a branch
+there too — there is intentionally no plugin-style auto-discovery in
+v1, so every supported source is visible from one switch.
+
+## Built-in sources
+
+### `flyctl`
+
+Wraps `flyctl logs --no-tail` for one Fly.io app per `[[sources]]`
+entry. Each `capture()` call runs a fresh subprocess and yields stdout
+line by line.
+
+| Option    | Type    | Default | Description                                                                                                                                                    |
+| --------- | ------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app`     | string  | —       | Required Fly.io app name. Passed as `flyctl logs -a <app>`.                                                                                                    |
+| `no_tail` | boolean | `true`  | Run with `--no-tail`. Streaming `flyctl logs` (without `--no-tail`) is intentionally unsupported in v1; cursor filtering assumes the one-shot capture pattern. |
+
+Notes:
+
+- The `since` parameter is silently ignored — `flyctl logs` has no
+  native `--since` flag, so the cursor filter handles bounding alone.
+- Fly prefixes lines with an ANSI-coloured timestamp
+  (`\033[2m…\033[0m`). The cursor filter strips these before parsing;
+  the source itself emits raw lines.
+- The runner subprocess is terminated cleanly on early consumer exit
+  (a `break` or generator close), with a 5-second grace before SIGKILL.
+
+### Stubs (`wrangler`, `kubectl`, `cloudwatch`, `file`, `stdin`)
+
+All five are placeholders: `capture()` raises `NotImplementedError`.
+They exist so a config that names one of these `type`s validates and
+resolves at parse time, and so the registry and dispatcher round-trip
+tests cover the eventual real implementation paths.
+
+The expected shape when these land:
+
+- **`wrangler`** wraps `wrangler tail --format=json` (or the new
+  `wrangler tail` JSON output) for one Worker per source.
+- **`kubectl`** wraps `kubectl logs <pod>` with namespace/container
+  selectors. Will likely accept `since` natively.
+- **`cloudwatch`** uses the AWS SDK's `filter_log_events` against one
+  log group per source. `since` maps to `startTime`.
+- **`file`** tails (or one-shot reads) a path on disk. The simplest of
+  the lot; useful for testing and for ingesting logs already pulled
+  by another tool.
+- **`stdin`** reads lines from `sys.stdin`. Intended for piping
+  pre-captured logs into `paperbark analyse` / `paperbark search`.
+
+## Configuration
+
+Sources are declared as an array of tables in `paperbark.toml`. Each
+entry needs a unique `name` (the dir slug under each run) and a `type`
+(matched against the registry):
+
+```toml
+[[sources]]
+name = "web"
+type = "flyctl"
+app = "my-fly-web"
+
+[[sources]]
+name = "worker"
+type = "flyctl"
+app = "my-fly-worker"
+```
+
+Every key beyond `name` and `type` lands in `SourceConfig.options`.
+The dispatcher's `build_source` switch picks only the keys it knows
+about for each type — keys it doesn't recognise are silently dropped,
+so a typo in an option name is currently a quiet no-op. Validate
+required options inside the source's constructor (the way `flyctl`
+does for `app`) so missing values fail loudly. See
+[`docs/CONFIG.md`](CONFIG.md) for the full schema, including
+validation rules.
+
+## Adding a new source
+
+The interface is small enough that a new adapter is normally one
+module plus one dispatcher branch.
+
+1. **Write the source class.** New file under
+   `src/paperbark/sources/`. Set `name` as a class attribute and
+   implement `capture(*, since="")`. Yield lines lazily; don't dedup.
+
+   ```python
+   from collections.abc import Iterator
+
+
+   class JournaldSource:
+       name = "journald"
+
+       def __init__(self, *, unit: str) -> None:
+           if not unit:
+               raise ValueError("JournaldSource requires a unit name")
+           self.unit = unit
+
+       def capture(self, *, since: str = "") -> Iterator[str]:
+           cmd = ["journalctl", "-u", self.unit, "--no-pager"]
+           if since:
+               cmd += ["--since", since]
+           # ... run subprocess, yield stdout lines ...
+   ```
+
+2. **Register it.** In `src/paperbark/sources/__init__.py`, import the
+   class, add it to `__all__`, and add a `JournaldSource.name:
+JournaldSource` entry to `registered_sources()`.
+
+3. **Wire the dispatcher.** Add a branch to
+   `paperbark.dispatcher.build_source` that pulls the relevant
+   per-source options off `spec.options` and constructs the class.
+   Raise `DispatcherError` for missing required options (mirror the
+   `flyctl` branch).
+
+4. **Document it.** Add a row to the table at the top of this file,
+   add a section under "Built-in sources" with the option table, and
+   update the sources block in
+   [`docs/CONFIG.md`](CONFIG.md#sources) plus the README sources
+   table.
+
+5. **Test it.** Cover the registry, the constructor's input
+   validation, and the command shape (or upstream-call shape).
+   Existing patterns live in
+   [`tests/test_sources.py`](../tests/test_sources.py).
+
+A new source must not break the cursor-filter assumption: lines need
+to be parseable through the format layer to a record with a usable
+timestamp. If the upstream emits something exotic, a matching format
+preset is the right place for the parsing rules — not the source.
+
+## External plugin loader
+
+Loading third-party `Source` classes from arbitrary install paths is
+explicitly out of scope for v1 (see [`docs/ROADMAP.md`](ROADMAP.md)).
+The Protocol is intentionally documented so the plugin loader, when
+it lands, can be a thin layer on top of what's already here without
+disturbing existing sources.
