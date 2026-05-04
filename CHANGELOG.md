@@ -189,6 +189,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `paperbark.dispatcher`: `build_source` now raises `DispatcherError`
+  for any key in `SourceConfig.options` the target type doesn't
+  recognise (mirrors the existing missing-`app` pattern). Previously
+  unknown keys were silently dropped, so a typo like `[[sources]] appp
+= "..."` was a quiet no-op. `docs/SOURCES.md` drops the "silently
+  dropped" caveat. Three new dispatcher tests cover the flyctl typo,
+  alphabetical ordering of multiple offenders, and stub-source
+  rejection.
 - `paperbark.search`: normalise run-prefix output and `--run` selector
   comparison to forward slashes so Windows and POSIX produce identical
   matched-line prefixes, and a Windows operator passing

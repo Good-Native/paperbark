@@ -156,12 +156,12 @@ app = "my-fly-worker"
 
 Every key beyond `name` and `type` lands in `SourceConfig.options`.
 The dispatcher's `build_source` switch picks only the keys it knows
-about for each type — keys it doesn't recognise are silently dropped,
-so a typo in an option name is currently a quiet no-op. Validate
-required options inside the source's constructor (the way `flyctl`
-does for `app`) so missing values fail loudly. See
-[`docs/CONFIG.md`](CONFIG.md) for the full schema, including
-validation rules.
+about for each type and raises `DispatcherError` on any unrecognised
+key, so a typo in an option name fails loudly at startup rather than
+becoming a silent no-op. Validate required options inside the source's
+constructor (the way `flyctl` does for `app`) so missing values fail
+just as loudly. See [`docs/CONFIG.md`](CONFIG.md) for the full schema,
+including validation rules.
 
 ## Adding a new source
 
@@ -196,10 +196,11 @@ module plus one dispatcher branch.
 JournaldSource` entry to `registered_sources()`.
 
 3. **Wire the dispatcher.** Add a branch to
-   `paperbark.dispatcher.build_source` that pulls the relevant
-   per-source options off `spec.options` and constructs the class.
-   Raise `DispatcherError` for missing required options (mirror the
-   `flyctl` branch).
+   `paperbark.dispatcher.build_source` that calls
+   `_reject_unknown_options(spec, frozenset({...}))` with the keys the
+   source accepts, then pulls those keys off `spec.options` and
+   constructs the class. Raise `DispatcherError` for missing required
+   options (mirror the `flyctl` branch).
 
 4. **Document it.** Add a row to the table at the top of this file,
    add a section under "Built-in sources" with the option table, and

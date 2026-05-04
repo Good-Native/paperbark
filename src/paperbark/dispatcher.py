@@ -83,29 +83,50 @@ class DispatcherError(ValueError):
     the CLI can surface a more specific message."""
 
 
+def _reject_unknown_options(spec: SourceConfig, allowed: frozenset[str]) -> None:
+    """Fail closed on options the source type doesn't recognise.
+
+    A typo in a TOML option key would otherwise be a silent no-op — the
+    misspelled value never reaches the source constructor and the user
+    sees no signal that the option was ignored.
+    """
+    unknown = sorted(set(spec.options) - allowed)
+    if unknown:
+        joined = ", ".join(repr(k) for k in unknown)
+        raise DispatcherError(
+            f"source {spec.name!r}: unknown option(s) {joined} for type {spec.type!r}"
+        )
+
+
 def build_source(spec: SourceConfig) -> Source:
     """Build a :class:`Source` from a parsed :class:`SourceConfig`.
 
-    Raises :class:`DispatcherError` for unknown types or missing required
-    options. The flyctl source is the only one currently usable; the
-    stubs return Protocol-conformant instances so ``paperbark init`` /
-    config validation can still resolve them.
+    Raises :class:`DispatcherError` for unknown types, missing required
+    options, or unrecognised option keys. The flyctl source is the only
+    one currently usable; the stubs return Protocol-conformant instances
+    so ``paperbark init`` / config validation can still resolve them.
     """
     if spec.type == "flyctl":
+        _reject_unknown_options(spec, frozenset({"app", "no_tail"}))
         app = spec.options.get("app")
         if not isinstance(app, str) or not app:
             raise DispatcherError(f"source {spec.name!r}: 'app' is required for flyctl")
         no_tail = bool(spec.options.get("no_tail", True))
         return FlyctlSource(app=app, no_tail=no_tail)
     if spec.type == "wrangler":
+        _reject_unknown_options(spec, frozenset())
         return WranglerSource()
     if spec.type == "kubectl":
+        _reject_unknown_options(spec, frozenset())
         return KubectlSource()
     if spec.type == "cloudwatch":
+        _reject_unknown_options(spec, frozenset())
         return CloudWatchSource()
     if spec.type == "file":
+        _reject_unknown_options(spec, frozenset())
         return FileSource()
     if spec.type == "stdin":
+        _reject_unknown_options(spec, frozenset())
         return StdinSource()
     raise DispatcherError(f"source {spec.name!r}: unknown type {spec.type!r}")
 

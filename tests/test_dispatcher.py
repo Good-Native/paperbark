@@ -66,6 +66,33 @@ def test_build_source_rejects_unknown_type() -> None:
         build_source(spec)
 
 
+def test_build_source_flyctl_rejects_unknown_option() -> None:
+    spec = SourceConfig(
+        name="main",
+        type="flyctl",
+        options={"app": "fly-a", "appp": "typo"},
+    )
+    with pytest.raises(DispatcherError, match=r"unknown option\(s\) 'appp' for type 'flyctl'"):
+        build_source(spec)
+
+
+def test_build_source_flyctl_lists_unknown_options_alphabetically() -> None:
+    spec = SourceConfig(
+        name="main",
+        type="flyctl",
+        options={"app": "fly-a", "zebra": 1, "alpha": 2},
+    )
+    with pytest.raises(DispatcherError, match=r"unknown option\(s\) 'alpha', 'zebra'"):
+        build_source(spec)
+
+
+@pytest.mark.parametrize("type_", ["wrangler", "kubectl", "cloudwatch", "file", "stdin"])
+def test_build_source_stub_rejects_unknown_option(type_: str) -> None:
+    spec = SourceConfig(name="x", type=type_, options={"path": "/var/log/foo"})
+    with pytest.raises(DispatcherError, match=r"unknown option\(s\) 'path'"):
+        build_source(spec)
+
+
 @pytest.mark.parametrize(
     "type_, expected_class",
     [
