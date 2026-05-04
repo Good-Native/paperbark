@@ -6,12 +6,11 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 ## Current state
 
 - **Last verified:** 2026-05-04
-- **Latest commit:** `Thread analyse and search through TOML (#9)` on
-  `main` (`46e2995`). The `feature/docs-config` branch carries the
-  source-of-truth `docs/CONFIG.md`.
+- **Latest commit:** `Add docs/CONFIG.md TOML schema reference (#10)` on
+  `main` (`4f1e440`). `docs/SOURCES.md` lands next.
 - **Repo:** <https://github.com/Good-Native/paperbark>
 - **Released:** nothing yet (version stub `0.0.0`).
-- **Tests:** 361 passing across 25 test modules; CI has been green on
+- **Tests:** 363 passing across 26 test modules; CI has been green on
   every push since the `Land uv.lock and unblock CI` change.
 
 ### Implementation status
@@ -36,10 +35,10 @@ captures on a fixed cadence, fires snapshot analyses every
 the run root when the loop ends. The `.gitattributes` LF baseline
 landed direct-to-`main` in `644a4f4`. PR #9 threaded `[analyse]` and
 `[search]` through the TOML loader, so every CLI flag for those
-subcommands is also a TOML key. The `feature/docs-config` branch
-fills in `docs/CONFIG.md`. Remaining shortlist: `docs/SOURCES.md`
-and `docs/PROBES.md`, then release prep (PyPI reservation, version
-bump from `0.0.0`, Homebrew formula).
+subcommands is also a TOML key. PR #10 fills in `docs/CONFIG.md` and
+this branch fills in `docs/SOURCES.md`. Remaining shortlist:
+`docs/PROBES.md`, then release prep (PyPI reservation, version bump
+from `0.0.0`, Homebrew formula).
 
 ### Scaffold (done)
 
@@ -208,8 +207,8 @@ Carry these into the Python port:
 - Cross-run search and aggregation queries.
 - Optional alert sinks (Slack, PagerDuty).
 - Homebrew formula and PyPI release automation.
-- `docs/SOURCES.md`, `docs/PROBES.md` — referenced from `README.md`
-  and pending completion before release prep.
+- `docs/PROBES.md` — referenced from `README.md` and pending completion
+  before release prep.
 
 ## Naming and registries
 

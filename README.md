@@ -67,8 +67,8 @@ for the full schema reference.
 | Plain files                          | stub (interface only, post-v1) |
 | stdin                                | stub (interface only, post-v1) |
 
-See `docs/SOURCES.md` (forthcoming) for the `Source` interface and how to
-add a new one.
+See [`docs/SOURCES.md`](docs/SOURCES.md) for the `Source` interface and
+how to add a new one.
 
 ## Probes
 

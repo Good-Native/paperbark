@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- `docs/SOURCES.md`: `Source` interface reference. Documents the Protocol
+  contract (name attr, `capture(*, since="")`, no per-call state), the
+  mandatory cursor-filter chokepoint, the registry, the built-in source
+  list (real flyctl + five stubs), per-source options, and a step-by-step
+  walkthrough of adding a new source (module → registry → dispatcher
+  branch → docs → tests). README now links to it instead of marking it
+  forthcoming. New `tests/test_docs_sources.py` round-trips every
+  ` ```toml ` block in the doc through `from_dict` so doc examples can't
+  drift from the loader.
 - `docs/CONFIG.md`: full TOML schema reference. Documents discovery order,
   override semantics, duration-string grammar, every key under
   `[paperbark]` / `[monitor]` / `[analyse]` / `[search]` / `[probes]` /
