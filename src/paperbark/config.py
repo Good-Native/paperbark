@@ -330,7 +330,6 @@ def _parse_monitor(raw: Any) -> MonitorConfig:
         table.get("analyse_every", DEFAULT_ANALYSE_EVERY),
         "[monitor].analyse_every",
         require_positive=False,
-        require_non_negative=True,
     )
     run_id_raw = table.get("run_id", "")
     if not isinstance(run_id_raw, str):
@@ -345,18 +344,11 @@ def _parse_monitor(raw: Any) -> MonitorConfig:
     )
 
 
-def _parse_duration_field(
-    value: Any,
-    label: str,
-    *,
-    require_positive: bool,
-    require_non_negative: bool = False,
-) -> int:
+def _parse_duration_field(value: Any, label: str, *, require_positive: bool) -> int:
     """Validate a TOML duration field, accepting int seconds or shorthand strings.
 
-    ``require_positive`` rejects ``0``; ``require_non_negative`` only rejects
-    negative integers (negatives slip past :func:`parse_duration` itself when
-    they are passed as ints, since the parser short-circuits on the int form).
+    Negative ints are already rejected inside :func:`parse_duration`, so this
+    helper only adds the optional ``require_positive`` rule (which rejects 0).
     """
     if isinstance(value, bool) or not isinstance(value, int | str):
         raise ConfigError(
@@ -368,8 +360,6 @@ def _parse_duration_field(
         raise ConfigError(f"{label}: {exc}") from exc
     if require_positive and seconds <= 0:
         raise ConfigError(f"{label} must be > 0")
-    if require_non_negative and seconds < 0:
-        raise ConfigError(f"{label} must be >= 0")
     return seconds
 
 

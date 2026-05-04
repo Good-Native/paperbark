@@ -321,6 +321,14 @@ def test_monitor_analyse_every_zero_disables_snapshots() -> None:
     assert config.monitor.analyse_every == 0
 
 
+def test_monitor_analyse_every_rejects_negative() -> None:
+    # Pins ``parse_duration``'s int-side guard against accidental removal —
+    # negative ``analyse_every`` would otherwise be coerced to "snapshots
+    # disabled" silently, which is the opposite of helpful.
+    with pytest.raises(ConfigError, match=r"\[monitor\]\.analyse_every"):
+        from_dict({"monitor": {"analyse_every": -5}})
+
+
 @pytest.mark.parametrize("bad", [0, -1, "0", "0s", -5])
 def test_monitor_interval_must_be_positive(bad: object) -> None:
     with pytest.raises(ConfigError, match=r"\[monitor\]\.interval"):
