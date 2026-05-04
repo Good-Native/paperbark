@@ -45,7 +45,7 @@ string in one of these forms:
 | `1h`  | 1 hour (3600 seconds)   |
 | `42`  | 42 seconds (plain int)  |
 
-Combined forms (`1h30m`, `90s`-equivalent) are deliberately unsupported —
+Combined forms (`1h30m`, `1m30s`) are deliberately unsupported —
 the bash dispatcher doesn't accept them either and admitting them would
 silently widen the contract. Decimals, signs, and unknown suffixes raise
 `ConfigError`.
