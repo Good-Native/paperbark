@@ -189,11 +189,12 @@ class AnalyseConfig:
 class SearchConfig:
     """Defaults for ``paperbark search``.
 
-    ``case_sensitive`` is the canonical TOML key. The legacy CLI flag
-    ``--ignore-case`` is documentation-only (already on by default); the
-    inversion lives in :mod:`paperbark.search` and stays out of the typed
-    config. ``max = 0`` is the documented sentinel for "unlimited matches"
-    and matches the bash dispatcher's behaviour.
+    ``case_sensitive`` is the canonical TOML key. The CLI exposes
+    ``--ignore-case`` and ``--case-sensitive`` as a mutually exclusive pair
+    that both write to the ``case_sensitive`` dest, so either flag can clear
+    or set the TOML default at runtime. ``max = 0`` is the documented
+    sentinel for "unlimited matches" and matches the bash dispatcher's
+    behaviour.
     """
 
     run: str = "latest"

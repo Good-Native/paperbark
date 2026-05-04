@@ -124,6 +124,94 @@ def test_search_cli_keyword_replaces_toml(
     assert "panic: db down" not in captured.out
 
 
+def test_ignore_case_flag_overrides_toml_case_sensitive_true(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--ignore-case`` must clear a TOML ``[search].case_sensitive = true``.
+
+    Pre-fix the flag was inert (it set a separate ``args.ignore_case`` dest
+    that ``paperbark.search.run`` never read), so a TOML-true plus a CLI
+    ``--ignore-case`` left matching case-sensitive. The mutex group fix in
+    cli._build_parser ties both flags to the ``case_sensitive`` dest so the
+    CLI can clear the TOML override at runtime.
+    """
+    root = tmp_path / "logs"
+    raw = root / "20260503" / "1430_demo" / "demo-app" / "raw"
+    raw.mkdir(parents=True)
+    # Mixed-case sample: TOML ``case_sensitive = true`` would only match
+    # "PANIC", while ``--ignore-case`` should match both lines.
+    (raw / "sample.log").write_text(
+        "panic: lower\nPANIC: upper\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "paperbark.toml"
+    config_path.write_text(
+        f'[paperbark]\nroot = "{root.as_posix()}"\n\n'
+        "[search]\n"
+        'keywords = ["panic"]\n'
+        "case_sensitive = true\n",
+        encoding="utf-8",
+    )
+
+    rc = main(["search", "--config", str(config_path), "--ignore-case"])
+    captured = capsys.readouterr()
+    assert rc == 0
+    # Both lines must surface — proving the CLI flag overrode TOML.
+    assert "panic: lower" in captured.out
+    assert "PANIC: upper" in captured.out
+
+
+def test_case_sensitive_flag_overrides_toml_false(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--case-sensitive`` must enforce strict matching even when TOML omits it."""
+    root = tmp_path / "logs"
+    raw = root / "20260503" / "1430_demo" / "demo-app" / "raw"
+    raw.mkdir(parents=True)
+    (raw / "sample.log").write_text(
+        "panic: lower\nPANIC: upper\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "paperbark.toml"
+    config_path.write_text(
+        f'[paperbark]\nroot = "{root.as_posix()}"\n',
+        encoding="utf-8",
+    )
+
+    rc = main(
+        [
+            "search",
+            "--config",
+            str(config_path),
+            "--keyword",
+            "PANIC",
+            "--case-sensitive",
+        ]
+    )
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "PANIC: upper" in captured.out
+    assert "panic: lower" not in captured.out
+
+
+def test_ignore_case_and_case_sensitive_are_mutually_exclusive(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """argparse rejects ``--ignore-case`` and ``--case-sensitive`` together."""
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "search",
+                "--keyword",
+                "x",
+                "--ignore-case",
+                "--case-sensitive",
+            ]
+        )
+    err = capsys.readouterr().err
+    assert "not allowed with argument" in err
+
+
 def test_search_negative_max_exits_2(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     config_path = tmp_path / "paperbark.toml"
     config_path.write_text("", encoding="utf-8")

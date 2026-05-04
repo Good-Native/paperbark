@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `paperbark search`: `--ignore-case` is now wired through. Pre-fix it set a
+  separate `args.ignore_case` dest that `paperbark.search.run` never read,
+  so the flag was inert; that became user-visible once
+  `[search].case_sensitive` landed in the TOML loader (a TOML `true` plus a
+  CLI `--ignore-case` would have left matching case-sensitive). The CLI now
+  exposes `--ignore-case` and `--case-sensitive` as a mutually exclusive
+  pair sharing the `case_sensitive` dest, with a parser-level `default=None`
+  so either flag overrides the TOML value at runtime.
+
 ### Added
 
 - `paperbark.config`: new `[analyse]` and `[search]` tables. `AnalyseConfig`
@@ -18,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sections at their default values, and a TOML-supplied `[search].keywords`
   now drives matching with no `--keyword` flag required (previously search
   exited 2 in that scenario). Search `--max` validation matches the TOML
-  loader (`>= 0`; `0` = unlimited). Twenty-eight new unit tests across
+  loader (`>= 0`; `0` = unlimited). Thirty-one new unit tests across
   `tests/test_config.py`, `tests/test_cli_analyse.py`,
   `tests/test_cli_search.py`.
 - Repository-wide `.gitattributes` (LF normalisation) so prettier and ruff

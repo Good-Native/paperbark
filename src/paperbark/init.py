@@ -67,8 +67,8 @@ app = ""
 # Repeatable keyword/regex matchers; supply at least one at run time.
 keywords = []
 regexes = []
-# Case-sensitive matching (default off). The CLI --case-sensitive flag
-# overrides; --ignore-case is documentation-only.
+# Case-sensitive matching (default off). Either --case-sensitive or
+# --ignore-case on the CLI overrides this value at runtime.
 case_sensitive = false
 # Stop after N total matches (0 = unlimited).
 max = 0

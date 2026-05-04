@@ -4,9 +4,10 @@ Reads raw captures from a ``logs/YYYYMMDD/HHMM_<run-id>/<app>/raw/`` directory
 or the zipped ``raw.zip`` produced by monitor cleanup. Prints matching lines
 with a source prefix and a per-app/per-run match count summary on stderr.
 
-Ported from ``reference/search_logs.py`` with behaviour preserved verbatim,
-including the ``--ignore-case`` default-on flag (kept for documentation
-symmetry with ``--case-sensitive``).
+Ported from ``reference/search_logs.py`` with behaviour preserved verbatim.
+Case sensitivity is driven by ``args.case_sensitive`` only; the
+``--ignore-case`` and ``--case-sensitive`` CLI flags share that dest via a
+mutually exclusive group in :mod:`paperbark.cli`.
 """
 
 from __future__ import annotations

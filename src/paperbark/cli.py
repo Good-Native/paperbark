@@ -104,19 +104,30 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Logs root directory. Overrides [paperbark].root.",
     )
-    search.add_argument(
+    # ``--ignore-case`` and ``--case-sensitive`` are now mutually exclusive and
+    # share the ``case_sensitive`` dest. Pre-PR ``--ignore-case`` only set
+    # ``args.ignore_case`` while ``paperbark.search.run`` consulted
+    # ``args.case_sensitive`` exclusively, so the flag was silently inert.
+    # That latent bug became user-visible once ``[search].case_sensitive``
+    # landed in the TOML loader: a TOML ``true`` plus a CLI ``--ignore-case``
+    # would have left case-sensitivity stuck on. The mutually exclusive group
+    # makes both flags participate in the same override path; ``default=None``
+    # on the parser keeps them distinguishable from explicit ``False``.
+    case_group = search.add_mutually_exclusive_group()
+    case_group.add_argument(
         "-i",
         "--ignore-case",
-        action="store_true",
-        default=True,
-        help="Match case-insensitively (default: on).",
+        dest="case_sensitive",
+        action="store_false",
+        help="Match case-insensitively. Overrides [search].case_sensitive.",
     )
-    search.add_argument(
+    case_group.add_argument(
         "--case-sensitive",
+        dest="case_sensitive",
         action="store_true",
-        default=None,
         help="Force case-sensitive matching. Overrides [search].case_sensitive.",
     )
+    search.set_defaults(case_sensitive=None)
     search.add_argument(
         "--max",
         type=int,
@@ -479,6 +490,10 @@ def _run_search(args: argparse.Namespace) -> int:
         return 2
 
     root = _resolve_root(config.root, args)
+    # ``paperbark.search.run`` consults ``args.case_sensitive`` exclusively,
+    # so we don't carry a redundant ``ignore_case`` field on the Namespace.
+    # The ``--ignore-case`` CLI flag now writes to ``case_sensitive=False``
+    # via the mutex group in :func:`_build_parser`.
     return run_search(
         argparse.Namespace(
             run=search_cfg.run,
@@ -486,7 +501,6 @@ def _run_search(args: argparse.Namespace) -> int:
             app=search_cfg.app,
             keyword=list(search_cfg.keywords),
             regex=list(search_cfg.regexes),
-            ignore_case=not search_cfg.case_sensitive,
             case_sensitive=search_cfg.case_sensitive,
             max=search_cfg.max,
         )

@@ -12,8 +12,8 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
   carries the TOML threading for `[analyse]` and `[search]`.
 - **Repo:** <https://github.com/Good-Native/paperbark>
 - **Released:** nothing yet (version stub `0.0.0`).
-- **Tests:** 350 passing across 24 test modules; CI green on every push
-  since `Land uv.lock and unblock CI`.
+- **Tests:** 350 passing across 24 test modules; CI has been green on
+  every push since the `Land uv.lock and unblock CI` change.
 
 ### Implementation status
 
@@ -37,7 +37,7 @@ captures on a fixed cadence, fires snapshot analyses every
 the run root when the loop ends. The `.gitattributes` LF baseline
 landed direct-to-`main` in `644a4f4`. The
 `feature/analyse-search-toml` branch threads `[analyse]` and
-`[search]` through the TOML loader so every CLI flag for those
+`[search]` through the TOML loader, so every CLI flag for those
 subcommands is also a TOML key. Remaining shortlist: the
 `docs/CONFIG.md` / `docs/SOURCES.md` / `docs/PROBES.md`
 source-of-truth docs, then release prep (PyPI reservation, version
