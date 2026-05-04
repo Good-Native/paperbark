@@ -76,8 +76,8 @@ Severity rollup, panics and fatals, HTTP status, latency (p50/p95/p99),
 heartbeat gap detection, process health, autoscaler events,
 database/external errors, Sentry events, plus ad-hoc keyword and regex
 matches. Each probe is config-toggleable; regex sets are
-config-overridable. See `docs/PROBES.md` (forthcoming) for the full list
-and how to add one.
+config-overridable. See [`docs/PROBES.md`](docs/PROBES.md) for the full
+list, finding shapes, and how to add one.
 
 ## Licence
 

@@ -16,7 +16,7 @@ from paperbark.cli import (
     _merge_monitor_overrides,
     _print_state_line,
 )
-from paperbark.config import MonitorConfig
+from paperbark.config import MonitorConfig, ProbesConfig
 from paperbark.dispatcher import MonitorState
 
 
@@ -115,7 +115,8 @@ def test_snapshot_runner_builds_namespace_for_subrun(tmp_path: Path) -> None:
         captured.append(ns)
         return 0
 
-    runner = _make_snapshot_runner(tmp_path, _fake_run)
+    probes_cfg = ProbesConfig()
+    runner = _make_snapshot_runner(tmp_path, _fake_run, probes_cfg)
     run_dir = tmp_path / "20260503" / "1430_test"
     run_dir.mkdir(parents=True)
     out_base = run_dir / "snapshots" / "analysis_120000Z"
@@ -130,6 +131,7 @@ def test_snapshot_runner_builds_namespace_for_subrun(tmp_path: Path) -> None:
     assert ns.keyword == []
     assert ns.regex == []
     assert ns.stdout is False
+    assert ns.probes is probes_cfg
 
 
 def test_snapshot_runner_passes_none_for_final_analyse(tmp_path: Path) -> None:
@@ -139,7 +141,7 @@ def test_snapshot_runner_passes_none_for_final_analyse(tmp_path: Path) -> None:
         captured.append(ns)
         return 0
 
-    runner = _make_snapshot_runner(tmp_path, _record)
+    runner = _make_snapshot_runner(tmp_path, _record, ProbesConfig())
     run_dir = tmp_path / "20260503" / "1430_test"
     run_dir.mkdir(parents=True)
     runner(run_dir, None)
@@ -153,7 +155,7 @@ def test_snapshot_runner_raises_on_non_zero_exit(tmp_path: Path) -> None:
     silently treat the failure as success — analyse.run uses non-zero exit
     codes for "no app dirs with raw logs" and similar soft errors.
     """
-    runner = _make_snapshot_runner(tmp_path, lambda _ns: 2)
+    runner = _make_snapshot_runner(tmp_path, lambda _ns: 2, ProbesConfig())
     run_dir = tmp_path / "20260503" / "1430_test"
     run_dir.mkdir(parents=True)
     with pytest.raises(RuntimeError, match="exited with code 2"):

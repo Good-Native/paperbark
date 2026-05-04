@@ -68,7 +68,6 @@ include = [
 line-length = 100
 target-version = "py311"
 src = ["src", "tests"]
-extend-exclude = ["reference"]
 
 [tool.ruff.lint]
 select = [

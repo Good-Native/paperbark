@@ -20,6 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from paperbark.config import ProbesConfig
 from paperbark.probes import default_probes, parse_line
 from paperbark.probes._record import strip_ansi
 from paperbark.search import iter_lines, resolve_runs
@@ -64,9 +65,10 @@ def _analyse_app(
     app_dir: Path,
     extra_keywords: list[str],
     extra_regexes: list[str],
+    probes_cfg: ProbesConfig,
 ) -> dict[str, Any]:
-    """Run every default probe against ``app_dir`` and roll up the report."""
-    probes = default_probes(extra_keywords, extra_regexes)
+    """Run the configured probe set against ``app_dir`` and roll up the report."""
+    probes = default_probes(extra_keywords, extra_regexes, config=probes_cfg)
     total_lines = 0
     unique_lines = 0
     parsed_records = 0
@@ -193,7 +195,8 @@ def _write_run_report(
     """Build, render, and write the report for one run."""
     keywords = list(getattr(args, "keyword", []) or [])
     regexes = list(getattr(args, "regex", []) or [])
-    app_reports = [_analyse_app(d, keywords, regexes) for d in apps]
+    probes_cfg = getattr(args, "probes", None) or ProbesConfig()
+    app_reports = [_analyse_app(d, keywords, regexes, probes_cfg) for d in apps]
     report: dict[str, Any] = {
         "run": run_dir.relative_to(root).as_posix(),
         "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),

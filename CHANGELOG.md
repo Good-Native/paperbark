@@ -9,6 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2026-05-04
 
+### Added
+
+- `paperbark.probes.default_probes` now honours
+  `paperbark.config.ProbesConfig`. `[probes]` toggles drop the named
+  probe from the constructed set, `[probes].keywords` and
+  `[probes].regexes` fold into the trailing `Ad-hoc keywords` bucket
+  alongside any `--keyword` / `--regex` extras, and
+  `[probes.patterns].<probe>` entries replace the built-in regex set
+  for that probe (overrides do not extend — copy the defaults across to
+  extend). Threaded through `paperbark.analyse` and the dispatcher's
+  snapshot path so both one-shot analyse runs and monitor snapshots
+  pick up the configured set. Previously `[probes]` was parsed and
+  validated but never read at runtime, so the user-visible behaviour
+  matched only the documented surface in `docs/CONFIG.md`. Eleven new
+  tests in `tests/test_probes_config.py`.
+- `docs/PROBES.md`: probe-layer reference. Documents the `Probe`
+  Protocol, the canonical record, every built-in probe (toggle name,
+  default regex set or finding shape), the `[probes]` /
+  `[probes.patterns]` surface, and the four-step "add a new probe"
+  walkthrough. README now links to it instead of marking it
+  forthcoming.
+
+### Changed
+
+- Retired the `reference/` bash originals (formerly carried as a port
+  source under MIT). The migration is complete; the port lives in
+  `src/paperbark/`. Ruff's `extend-exclude = ["reference"]` is gone with
+  it. `docs/ROADMAP.md` updates the "what was kept vs rebuilt" table to
+  past tense.
+- `CODE_OF_CONDUCT.md`: replace the placeholder enforcement address with
+  `support@goodnative.co`.
+
 ### Documentation
 
 - `docs/SOURCES.md`: `Source` interface reference. Documents the Protocol
