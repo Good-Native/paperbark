@@ -291,6 +291,39 @@ def test_monitor_defaults_match_bash_dispatcher() -> None:
     assert config.monitor.interval == 3
     assert config.monitor.iterations == 1440
     assert config.monitor.analyse_every == 300
+    # Bash-parity defaults: cleanup on, 1-day retention, zip mode.
+    assert config.monitor.cleanup_enabled is True
+    assert config.monitor.cleanup_days == 1
+    assert config.monitor.cleanup_mode == "zip"
+
+
+def test_from_dict_parses_cleanup_fields() -> None:
+    config = from_dict(
+        {
+            "monitor": {
+                "cleanup_enabled": False,
+                "cleanup_days": 7,
+                "cleanup_mode": "delete",
+            },
+        }
+    )
+    assert config.monitor.cleanup_enabled is False
+    assert config.monitor.cleanup_days == 7
+    assert config.monitor.cleanup_mode == "delete"
+
+
+def test_cleanup_days_rejects_negative() -> None:
+    from paperbark.config import ConfigError
+
+    with pytest.raises(ConfigError, match="cleanup_days must be >= 0"):
+        from_dict({"monitor": {"cleanup_days": -1}})
+
+
+def test_cleanup_mode_rejects_unknown_value() -> None:
+    from paperbark.config import ConfigError
+
+    with pytest.raises(ConfigError, match="cleanup_mode must be one of"):
+        from_dict({"monitor": {"cleanup_mode": "shred"}})
 
 
 def test_from_dict_parses_monitor_section() -> None:

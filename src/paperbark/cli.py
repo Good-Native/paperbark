@@ -73,6 +73,40 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help=("Snapshot analyse cadence (or 0 to disable). Overrides [monitor].analyse_every."),
     )
+    cleanup_group = monitor.add_mutually_exclusive_group()
+    cleanup_group.add_argument(
+        "--no-cleanup",
+        dest="cleanup_enabled",
+        action="store_false",
+        default=None,
+        help="Disable rotation of older run dirs. Overrides [monitor].cleanup_enabled.",
+    )
+    cleanup_group.add_argument(
+        "--cleanup",
+        dest="cleanup_enabled",
+        action="store_true",
+        default=None,
+        help="Force rotation of older run dirs. Overrides [monitor].cleanup_enabled.",
+    )
+    monitor.add_argument(
+        "--cleanup-days",
+        type=int,
+        default=None,
+        help=(
+            "Rotate run dirs older than N days (default: 1). 0 = clean every"
+            " older run, including yesterday's. Overrides [monitor].cleanup_days."
+        ),
+    )
+    monitor.add_argument(
+        "--cleanup-mode",
+        choices=("zip", "delete"),
+        default=None,
+        help=(
+            "Rotation mode: 'zip' archives raw/ and removes per-iter JSON/CSV"
+            " (default), 'delete' removes the run dir entirely."
+            " Overrides [monitor].cleanup_mode."
+        ),
+    )
 
     search = subparsers.add_parser(
         "search",
@@ -139,6 +173,14 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Stop after N total matches (0 = unlimited). Overrides [search].max.",
+    )
+    search.add_argument(
+        "--keep-ansi",
+        action="store_true",
+        help=(
+            "Preserve ANSI escape sequences in matched lines. By default they"
+            " are stripped so piped/redirected output stays readable."
+        ),
     )
 
     analyse = subparsers.add_parser(
@@ -363,6 +405,9 @@ def _merge_monitor_overrides(
     iterations = base.iterations
     analyse_every = base.analyse_every
     run_id = base.run_id
+    cleanup_enabled = base.cleanup_enabled
+    cleanup_days = base.cleanup_days
+    cleanup_mode = base.cleanup_mode
 
     interval_arg = getattr(args, "interval", None)
     if interval_arg is not None:
@@ -392,11 +437,30 @@ def _merge_monitor_overrides(
             raise ValueError(f"--run-id: {RUN_ID_HELP}")
         run_id = run_id_arg
 
+    cleanup_enabled_arg = getattr(args, "cleanup_enabled", None)
+    if cleanup_enabled_arg is not None:
+        cleanup_enabled = bool(cleanup_enabled_arg)
+
+    cleanup_days_arg = getattr(args, "cleanup_days", None)
+    if cleanup_days_arg is not None:
+        if cleanup_days_arg < 0:
+            raise ValueError("--cleanup-days must be >= 0")
+        cleanup_days = cleanup_days_arg
+
+    cleanup_mode_arg = getattr(args, "cleanup_mode", None)
+    if cleanup_mode_arg is not None:
+        # argparse's ``choices`` already restricts the input; the assignment
+        # is just for clarity at the merge step.
+        cleanup_mode = cleanup_mode_arg
+
     return MonitorConfig(
         interval=interval,
         iterations=iterations,
         analyse_every=analyse_every,
         run_id=run_id,
+        cleanup_enabled=cleanup_enabled,
+        cleanup_days=cleanup_days,
+        cleanup_mode=cleanup_mode,
     )
 
 
@@ -521,6 +585,7 @@ def _run_search(args: argparse.Namespace) -> int:
             regex=list(search_cfg.regexes),
             case_sensitive=search_cfg.case_sensitive,
             max=search_cfg.max,
+            keep_ansi=bool(getattr(args, "keep_ansi", False)),
         )
     )
 

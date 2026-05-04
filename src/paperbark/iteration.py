@@ -29,11 +29,39 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 _LOCAL_TZ = ZoneInfo("Australia/Melbourne")
-_TIMESTAMP_KEYS = ("time", "timestamp", "@timestamp", "ts", "created_at")
-_MESSAGE_KEYS = ("msg", "message")
-_CORE_FIELDS = frozenset({*_TIMESTAMP_KEYS, *_MESSAGE_KEYS, "level", "component"})
+DEFAULT_TIMESTAMP_KEYS = ("time", "timestamp", "@timestamp", "ts", "created_at")
+DEFAULT_LEVEL_KEYS = ("level",)
+DEFAULT_MESSAGE_KEYS = ("msg", "message")
+DEFAULT_COMPONENT_KEYS = ("component",)
 _FLAT_COLUMNS = ("timestamp", "level", "component", "message", "extras")
 _UNKNOWN = "unknown"
+
+# Field-name → default key tuple. ``format_keys`` arguments override these
+# entries individually; unmentioned fields keep their defaults so a partial
+# override (just a custom timestamp key, say) doesn't lose level/message
+# detection.
+_DEFAULT_FORMAT_KEYS: dict[str, tuple[str, ...]] = {
+    "timestamp": DEFAULT_TIMESTAMP_KEYS,
+    "level": DEFAULT_LEVEL_KEYS,
+    "message": DEFAULT_MESSAGE_KEYS,
+    "component": DEFAULT_COMPONENT_KEYS,
+}
+FORMAT_KEY_FIELDS: tuple[str, ...] = tuple(_DEFAULT_FORMAT_KEYS.keys())
+
+
+def _resolved_format_keys(
+    overrides: dict[str, tuple[str, ...]] | None,
+) -> dict[str, tuple[str, ...]]:
+    """Merge caller overrides with built-in defaults.
+
+    Returning a fresh dict each call keeps the module-level defaults
+    immutable; the loader rejects unknown override keys upstream so a
+    typo can't silently disable detection.
+    """
+    resolved = dict(_DEFAULT_FORMAT_KEYS)
+    if overrides:
+        resolved.update(overrides)
+    return resolved
 
 
 def summarise_lines(
@@ -41,6 +69,7 @@ def summarise_lines(
     *,
     source: str = "",
     flat_rows: list[dict[str, str]] | None = None,
+    format_keys: dict[str, tuple[str, ...]] | None = None,
 ) -> dict[str, Any]:
     """Summarise an iterable of raw log ``lines``.
 
@@ -48,7 +77,20 @@ def summarise_lines(
     record (lines that fail to parse are skipped for the flat output).
     The summary dict has the canonical shape consumed by
     :func:`paperbark.aggregate.merge_iteration`.
+
+    ``format_keys`` overrides the per-field JSON key tuples this function
+    consults when extracting timestamp / level / message / component from
+    a parsed record. Unspecified fields keep their defaults; the loader
+    is responsible for rejecting unknown field names so a typo can't
+    silently disable a field.
     """
+    keys = _resolved_format_keys(format_keys)
+    timestamp_keys = keys["timestamp"]
+    level_keys = keys["level"]
+    message_keys = keys["message"]
+    component_keys = keys["component"]
+    core_fields = frozenset({*timestamp_keys, *level_keys, *message_keys, *component_keys})
+
     level_counts: dict[str, Counter[str]] = defaultdict(Counter)
     component_counts: dict[str, Counter[str]] = defaultdict(Counter)
     event_counts: dict[str, Counter[str]] = defaultdict(Counter)
@@ -63,10 +105,10 @@ def summarise_lines(
             errors += 1
             continue
         parsed += 1
-        minute = _minute_key(record)
-        level = str(record.get("level") or _UNKNOWN).lower()
-        component = str(record.get("component") or _UNKNOWN)
-        raw_message = _first_string(record, _MESSAGE_KEYS) or "<no message>"
+        minute = _minute_key(record, timestamp_keys)
+        level = str(_first_string(record, level_keys) or _UNKNOWN).lower()
+        component = str(_first_string(record, component_keys) or _UNKNOWN)
+        raw_message = _first_string(record, message_keys) or "<no message>"
         message = _strip_component_prefix(raw_message, component)
         event = f"{component}: {message}"
 
@@ -77,10 +119,10 @@ def summarise_lines(
             warn_error_counts[event] += 1
 
         if flat_rows is not None:
-            extras = {k: v for k, v in record.items() if k not in _CORE_FIELDS}
+            extras = {k: v for k, v in record.items() if k not in core_fields}
             flat_rows.append(
                 {
-                    "timestamp": _full_timestamp(record),
+                    "timestamp": _full_timestamp(record, timestamp_keys),
                     "level": level,
                     "component": component,
                     "message": message,
@@ -109,15 +151,26 @@ def summarise_lines(
     }
 
 
-def summarise_log_file(raw_path: Path, *, flat_csv_path: Path | None = None) -> dict[str, Any]:
+def summarise_log_file(
+    raw_path: Path,
+    *,
+    flat_csv_path: Path | None = None,
+    format_keys: dict[str, tuple[str, ...]] | None = None,
+) -> dict[str, Any]:
     """Summarise the raw log file at ``raw_path``.
 
     Always returns the summary dict. When ``flat_csv_path`` is supplied
-    a flat per-line CSV is written there as a side effect.
+    a flat per-line CSV is written there as a side effect. ``format_keys``
+    is forwarded to :func:`summarise_lines` for per-source key overrides.
     """
     flat_rows: list[dict[str, str]] | None = [] if flat_csv_path else None
     with raw_path.open("r", encoding="utf-8", errors="ignore") as handle:
-        summary = summarise_lines(handle, source=str(raw_path), flat_rows=flat_rows)
+        summary = summarise_lines(
+            handle,
+            source=str(raw_path),
+            flat_rows=flat_rows,
+            format_keys=format_keys,
+        )
     if flat_csv_path is not None and flat_rows is not None:
         write_flat_csv(flat_csv_path, flat_rows)
     return summary
@@ -178,8 +231,8 @@ def _first_string(record: dict[str, Any], keys: tuple[str, ...]) -> str:
     return ""
 
 
-def _minute_key(record: dict[str, Any]) -> str:
-    raw = _first_string(record, _TIMESTAMP_KEYS)
+def _minute_key(record: dict[str, Any], timestamp_keys: tuple[str, ...]) -> str:
+    raw = _first_string(record, timestamp_keys)
     if not raw:
         return _UNKNOWN
     cleaned = raw.replace("Z", "+00:00")
@@ -190,8 +243,8 @@ def _minute_key(record: dict[str, Any]) -> str:
     return parsed.strftime("%Y-%m-%dT%H:%M")
 
 
-def _full_timestamp(record: dict[str, Any]) -> str:
-    raw = _first_string(record, _TIMESTAMP_KEYS)
+def _full_timestamp(record: dict[str, Any], timestamp_keys: tuple[str, ...]) -> str:
+    raw = _first_string(record, timestamp_keys)
     if not raw:
         return ""
     cleaned = raw.replace("Z", "+00:00")

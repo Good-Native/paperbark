@@ -30,12 +30,24 @@ def test_flyctl_source_satisfies_protocol() -> None:
 
 def test_flyctl_command_includes_app_and_no_tail_by_default() -> None:
     source = FlyctlSource(app="example", runner=lambda _cmd: iter(()))
-    assert source.command == ["flyctl", "logs", "-a", "example", "--no-tail"]
+    # ``-n 400`` is the bash dispatcher's default capture-window size; pinned
+    # so the v0.1.1 ``samples`` knob defaults can't drift away from parity.
+    assert source.command == ["flyctl", "logs", "-a", "example", "-n", "400", "--no-tail"]
 
 
 def test_flyctl_command_drops_no_tail_when_disabled() -> None:
     source = FlyctlSource(app="example", no_tail=False, runner=lambda _cmd: iter(()))
-    assert source.command == ["flyctl", "logs", "-a", "example"]
+    assert source.command == ["flyctl", "logs", "-a", "example", "-n", "400"]
+
+
+def test_flyctl_command_honours_custom_samples() -> None:
+    source = FlyctlSource(app="example", samples=900, runner=lambda _cmd: iter(()))
+    assert source.command == ["flyctl", "logs", "-a", "example", "-n", "900", "--no-tail"]
+
+
+def test_flyctl_rejects_zero_or_negative_samples() -> None:
+    with pytest.raises(ValueError, match="samples must be > 0"):
+        FlyctlSource(app="example", samples=0)
 
 
 def test_flyctl_capture_yields_lines_from_runner() -> None:
@@ -51,7 +63,7 @@ def test_flyctl_capture_yields_lines_from_runner() -> None:
         "2026-05-03T02:00:01Z first\n",
         "2026-05-03T02:00:02Z second\n",
     ]
-    assert captured == [["flyctl", "logs", "-a", "example", "--no-tail"]]
+    assert captured == [["flyctl", "logs", "-a", "example", "-n", "400", "--no-tail"]]
 
 
 def test_flyctl_requires_app_name() -> None:

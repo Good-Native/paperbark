@@ -417,6 +417,39 @@ def test_iter_lines_skips_corrupt_zip_member(
     assert "bad.log" in err
 
 
+def test_search_strips_ansi_from_matched_lines_by_default(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Matched lines printed by ``paperbark search`` must not carry ANSI escapes.
+
+    Fly's ``--no-tail`` output prefixes every line with a coloured timestamp;
+    when piped to a file or another tool the escape sequences become noise.
+    Pre-v0.1.1 search re-emitted the line verbatim — see the bash-parity
+    audit notes — so we now strip on the print path by default.
+    """
+    root = tmp_path / "logs"
+    coloured = "\x1b[2m2026-05-04T21:19:02Z\x1b[0m app[abc] panic: db down\n"
+    _write(root / "20260504" / "1430_run_x" / "app1" / "raw" / "a.log", coloured)
+    rc = main(["search", "--root", str(root), "--keyword", "panic"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "\x1b[" not in out
+    assert "panic: db down" in out
+
+
+def test_search_keep_ansi_preserves_escape_sequences(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--keep-ansi`` is the explicit opt-out for TTY-aware viewers."""
+    root = tmp_path / "logs"
+    coloured = "\x1b[2m2026-05-04T21:19:02Z\x1b[0m app panic: db down\n"
+    _write(root / "20260504" / "1430_run_x" / "app1" / "raw" / "a.log", coloured)
+    rc = main(["search", "--root", str(root), "--keyword", "panic", "--keep-ansi"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "\x1b[" in out
+
+
 def test_keyboard_interrupt_exits_130(monkeypatch: pytest.MonkeyPatch) -> None:
     """SIGINT during a search returns exit code 130 (the documented contract)."""
     import paperbark.search as search_mod

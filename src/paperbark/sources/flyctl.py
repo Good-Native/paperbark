@@ -13,6 +13,11 @@ import subprocess
 from collections.abc import Callable, Iterator
 
 _FLYCTL_TIMEOUT = 5.0  # seconds; how long to wait after terminate() before SIGKILL.
+DEFAULT_SAMPLES = 400
+"""Per-iteration capture window size, mirrors ``reference/logs.sh``'s
+``--samples`` default. Without this knob ``flyctl logs --no-tail`` falls
+back to its built-in window (~100 lines), which can drop messages
+between iterations on busy apps."""
 
 
 def _default_runner(command: list[str]) -> Iterator[str]:
@@ -56,17 +61,30 @@ class FlyctlSource:
         app: str,
         *,
         no_tail: bool = True,
+        samples: int = DEFAULT_SAMPLES,
+        format_keys: dict[str, tuple[str, ...]] | None = None,
         runner: Callable[[list[str]], Iterator[str]] | None = None,
     ) -> None:
         if not app:
             raise ValueError("FlyctlSource requires a non-empty app name")
+        if samples <= 0:
+            raise ValueError(f"FlyctlSource samples must be > 0, got {samples}")
         self.app = app
         self.no_tail = no_tail
+        self.samples = samples
+        self.format_keys = format_keys
+        """JSON key overrides for the iteration parser.
+
+        ``None`` keeps the iteration module's defaults, which match Fly's
+        own log shape. Operators whose lines don't fit the default keys
+        can supply ``[[sources]].format_keys`` in TOML to override per
+        canonical field — see :file:`docs/SOURCES.md`.
+        """
         self._runner = runner or _default_runner
 
     @property
     def command(self) -> list[str]:
-        cmd = ["flyctl", "logs", "-a", self.app]
+        cmd = ["flyctl", "logs", "-a", self.app, "-n", str(self.samples)]
         if self.no_tail:
             cmd.append("--no-tail")
         return cmd

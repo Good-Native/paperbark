@@ -41,6 +41,12 @@ analyse_every = "5m"
 # Run identifier. Empty = auto-generated <adjective>-<colour> slug.
 # Letters, numbers, '.', '_', '-' only; may not start with '.' or '-'.
 run_id = ""
+# Automatic rotation of older run dirs. With cleanup_enabled = true the
+# loop archives any run dated more than `cleanup_days` days ago at start.
+# Modes: "zip" (archive raw/, keep summaries) or "delete" (rm -rf).
+cleanup_enabled = true
+cleanup_days = 1
+cleanup_mode = "zip"
 
 
 # `paperbark analyse` defaults. CLI flags override these.
@@ -113,6 +119,15 @@ regexes = []
 # name = "main"
 # type = "flyctl"
 # app = "your-fly-app"
+# # Per-iteration capture window size (-n on flyctl). Defaults to 400, the
+# # bash dispatcher's --samples default. Lift this on busy apps if iter 1
+# # captures fall short of an interval's worth of new lines.
+# samples = 400
+# # Optional JSON key overrides. Use when your app emits structured logs
+# # under non-default keys; each value is a string or list of strings.
+# # Unspecified fields fall back to the defaults
+# # (timestamp/level/message/component).
+# # format_keys = { timestamp = "ts", level = ["severity", "lvl"] }
 #
 # [[sources]]
 # name = "worker"

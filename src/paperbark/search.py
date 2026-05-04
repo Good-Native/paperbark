@@ -19,6 +19,8 @@ import zipfile
 from collections.abc import Iterator
 from pathlib import Path
 
+from paperbark.cursor import ANSI_RE
+
 
 def _candidate_run_dirs(root: Path) -> list[Path]:
     """Return run directories under ``logs/YYYYMMDD/HHMM_*`` sorted oldest -> newest."""
@@ -134,8 +136,16 @@ def search_runs(
     app_filter: list[str] | None,
     max_matches: int,
     root: Path,
+    *,
+    keep_ansi: bool = False,
 ) -> int:
-    """Print matching lines and per-run summaries; return the total match count."""
+    """Print matching lines and per-run summaries; return the total match count.
+
+    ANSI escape sequences (Fly's coloured timestamp prefix, etc.) are stripped
+    from the printed line by default so output stays readable when piped to a
+    file or another tool. Pass ``keep_ansi=True`` to preserve them — useful
+    when the consumer is itself a TTY-aware viewer.
+    """
     total = 0
     stop = False
     for run in runs:
@@ -148,7 +158,8 @@ def search_runs(
                 if pattern.search(line):
                     count += 1
                     total += 1
-                    print(f"[{rel_run}][{app_dir.name}][{source}] {line}")
+                    display = line if keep_ansi else ANSI_RE.sub("", line)
+                    print(f"[{rel_run}][{app_dir.name}][{source}] {display}")
                     if max_matches and total >= max_matches:
                         stop = True
                         break
@@ -188,5 +199,6 @@ def run(args: argparse.Namespace) -> int:
         return 1
 
     apps = [a.strip() for a in args.app.split(",") if a.strip()] or None
-    search_runs(runs, pattern, apps, args.max, root)
+    keep_ansi = bool(getattr(args, "keep_ansi", False))
+    search_runs(runs, pattern, apps, args.max, root, keep_ansi=keep_ansi)
     return 0

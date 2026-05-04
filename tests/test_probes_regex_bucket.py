@@ -59,7 +59,7 @@ def test_default_probes_includes_expected_set() -> None:
         "Heartbeat",
         "Process health",
         "Autoscaler",
-        "Database / external",
+        "External errors and timeouts",
         "Sentry",
     ]
 

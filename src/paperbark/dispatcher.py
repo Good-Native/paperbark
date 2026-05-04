@@ -10,9 +10,10 @@ A run-dir laid out per :data:`docs/ROADMAP.md`'s public-contract section
 is created on the first call and reused for every subsequent iteration::
 
     logs/YYYYMMDD/HHMM_<slug>_<settings>/
-    ├── <app>/raw/iter_<NNN>_<HHMMSSZ>.log
+    ├── <app>/raw/<HHMMSSZ>_iter<N>.log
     ├── <app>/.cursor
-    ├── <app>/iter_<NNN>_<HHMMSSZ>.json
+    ├── <app>/<HHMMSSZ>_iter<N>.json
+    ├── <app>/<HHMMSSZ>_iter<N>.csv          # flat per-line side-output
     ├── <app>/time_series.csv
     ├── <app>/events_per_minute.csv
     ├── <app>/components_per_minute.csv
@@ -31,11 +32,12 @@ from __future__ import annotations
 import json
 import random
 import re
+import sys
 import threading
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from paperbark.aggregate import aggregate
@@ -51,6 +53,7 @@ from paperbark.sources import (
     StdinSource,
     WranglerSource,
 )
+from paperbark.sources.flyctl import DEFAULT_SAMPLES as DEFAULT_FLYCTL_SAMPLES
 
 # Type aliases for the loop's injection points. Keeping them at module scope
 # avoids long inline ``Callable[...]`` annotations on every signature.
@@ -83,6 +86,55 @@ class DispatcherError(ValueError):
     the CLI can surface a more specific message."""
 
 
+_FORMAT_KEY_FIELDS: frozenset[str] = frozenset({"timestamp", "level", "message", "component"})
+
+
+def _parse_format_keys(raw: object, source_name: str) -> dict[str, tuple[str, ...]] | None:
+    """Validate a ``[[sources]].format_keys`` table and convert to canonical form.
+
+    Returns ``None`` when the operator didn't supply any overrides — that is
+    the loader's signal to ``iteration.summarise_lines`` that defaults apply.
+    Each value may be a single string (sugar for a one-element list) or a
+    list of strings; unknown field names are rejected so a typo can't
+    silently disable detection of a canonical field.
+    """
+    if raw is None:
+        return None
+    from collections.abc import Mapping
+
+    if not isinstance(raw, Mapping):
+        raise DispatcherError(
+            f"source {source_name!r}: 'format_keys' must be a table of "
+            f"<field-name> = <key list>, got {type(raw).__name__}"
+        )
+    unknown = sorted(set(raw) - _FORMAT_KEY_FIELDS)
+    if unknown:
+        joined = ", ".join(repr(k) for k in unknown)
+        allowed = ", ".join(repr(k) for k in sorted(_FORMAT_KEY_FIELDS))
+        raise DispatcherError(
+            f"source {source_name!r}: unknown format_keys field(s) {joined};"
+            f" allowed fields: {allowed}"
+        )
+    out: dict[str, tuple[str, ...]] = {}
+    for field_name, value in raw.items():
+        if isinstance(value, str):
+            keys: tuple[str, ...] = (value,)
+        elif isinstance(value, list) and all(isinstance(v, str) for v in value):
+            keys = tuple(value)
+        else:
+            raise DispatcherError(
+                f"source {source_name!r}: format_keys.{field_name} must be a"
+                f" string or a list of strings"
+            )
+        if not keys or any(not k for k in keys):
+            raise DispatcherError(
+                f"source {source_name!r}: format_keys.{field_name} must"
+                f" contain at least one non-empty key"
+            )
+        out[field_name] = keys
+    return out
+
+
 def _reject_unknown_options(spec: SourceConfig, allowed: frozenset[str]) -> None:
     """Fail closed on options the source type doesn't recognise.
 
@@ -107,12 +159,23 @@ def build_source(spec: SourceConfig) -> Source:
     so ``paperbark init`` / config validation can still resolve them.
     """
     if spec.type == "flyctl":
-        _reject_unknown_options(spec, frozenset({"app", "no_tail"}))
+        _reject_unknown_options(spec, frozenset({"app", "no_tail", "samples", "format_keys"}))
         app = spec.options.get("app")
         if not isinstance(app, str) or not app:
             raise DispatcherError(f"source {spec.name!r}: 'app' is required for flyctl")
         no_tail = bool(spec.options.get("no_tail", True))
-        return FlyctlSource(app=app, no_tail=no_tail)
+        samples_raw = spec.options.get("samples", DEFAULT_FLYCTL_SAMPLES)
+        if isinstance(samples_raw, bool) or not isinstance(samples_raw, int):
+            # bool is an int subclass; reject so ``samples = true`` fails
+            # closed instead of being read as 1.
+            raise DispatcherError(
+                f"source {spec.name!r}: 'samples' must be an integer, "
+                f"got {type(samples_raw).__name__}"
+            )
+        if samples_raw <= 0:
+            raise DispatcherError(f"source {spec.name!r}: 'samples' must be > 0, got {samples_raw}")
+        format_keys = _parse_format_keys(spec.options.get("format_keys"), spec.name)
+        return FlyctlSource(app=app, no_tail=no_tail, samples=samples_raw, format_keys=format_keys)
     if spec.type == "wrangler":
         _reject_unknown_options(spec, frozenset())
         return WranglerSource()
@@ -223,20 +286,27 @@ def capture_iteration(
 
     Lines from ``source.capture()`` are passed through the cursor filter
     against ``app_dir/.cursor`` and written to a fresh
-    ``app_dir/raw/iter_<NNN>_<HHMMSSZ>.log``. The raw log is then
-    summarised into ``app_dir/iter_<NNN>_<HHMMSSZ>.json`` (the same
-    shape :func:`paperbark.aggregate.merge_iteration` consumes).
+    ``app_dir/raw/<HHMMSSZ>_iter<N>.log``. The raw log is then
+    summarised into ``app_dir/<HHMMSSZ>_iter<N>.json`` (the same
+    shape :func:`paperbark.aggregate.merge_iteration` consumes), with a
+    sibling ``<HHMMSSZ>_iter<N>.csv`` carrying the flat per-line dump
+    (timestamp/level/component/message/extras) for ad-hoc spreadsheet
+    inspection.
+
+    The naming matches ``reference/process_logs.py`` so downstream
+    tooling that scans run dirs by iteration filename keeps working.
 
     Returns ``(raw_log_path, summary_json_path)``.
     """
     moment = now if now is not None else datetime.now(tz=UTC)
     timestamp = moment.strftime("%Y%m%dT%H%M%SZ")
-    iteration_label = f"iter_{iteration:04d}_{timestamp}"
+    iteration_label = f"{timestamp}_iter{iteration}"
 
     raw_dir = app_dir / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
     raw_log = raw_dir / f"{iteration_label}.log"
     summary_json = app_dir / f"{iteration_label}.json"
+    summary_csv = app_dir / f"{iteration_label}.csv"
     cursor_path = app_dir / ".cursor"
 
     cursor = ""
@@ -249,7 +319,13 @@ def capture_iteration(
     if new_cursor and new_cursor != cursor:
         cursor_path.write_text(new_cursor, encoding="utf-8")
 
-    summary = summarise_log_file(raw_log)
+    # Sources may attach a ``format_keys`` mapping that overrides the JSON
+    # key tuples ``iteration`` consults — useful when a Fly app emits
+    # structured logs with non-default field names. Falling back to the
+    # iteration module's defaults preserves the v0.1 behaviour for sources
+    # that don't carry the attribute (the stub sources, for example).
+    format_keys = getattr(source, "format_keys", None)
+    summary = summarise_log_file(raw_log, flat_csv_path=summary_csv, format_keys=format_keys)
     summary_json.write_text(
         json.dumps(summary, indent=2, sort_keys=True),
         encoding="utf-8",
@@ -348,6 +424,157 @@ def _iso_log_ts(when: datetime) -> str:
     return when.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def cleanup_old_runs(
+    root: Path,
+    *,
+    days: int,
+    mode: str,
+    log: Callable[[str], None] | None = None,
+    today: datetime | None = None,
+) -> None:
+    """Rotate run dirs older than ``days`` under ``root``.
+
+    Mirrors the bash dispatcher's ``perform_cleanup`` step: any run dir under
+    ``<root>/<YYYYMMDD>/<run>`` whose date component is strictly less than
+    ``today - days`` is processed. ``mode == "zip"`` archives every per-app
+    ``raw/`` directory into a sibling ``raw.zip`` and removes the bulky
+    per-iter ``*_iter*.{json,csv}`` files (summaries and aggregate CSVs are
+    kept). ``mode == "delete"`` removes the run dir outright.
+
+    No-op when ``root`` doesn't exist yet (first-run case). Failures on
+    individual runs are logged and swallowed so a single bad dir can't abort
+    the rest of the rotation pass.
+
+    ``today`` is injectable for tests so the cutoff is deterministic.
+    """
+    if mode not in ("zip", "delete"):
+        raise ValueError(f"cleanup mode must be 'zip' or 'delete', got {mode!r}")
+    if days < 0:
+        raise ValueError(f"cleanup days must be >= 0, got {days}")
+    if not root.exists():
+        return
+    log_fn = log or (lambda _msg: None)
+    moment = today if today is not None else datetime.now(tz=UTC)
+    cutoff = (moment.date() - timedelta(days=days)).strftime("%Y%m%d")
+    log_fn(f"Cleanup pass: cutoff {cutoff} (older than {days} day(s), mode {mode})")
+    for date_dir in sorted(root.iterdir()):
+        if not date_dir.is_dir() or len(date_dir.name) != 8 or not date_dir.name.isdigit():
+            continue
+        if date_dir.name >= cutoff:
+            continue
+        for run_dir in sorted(date_dir.iterdir()):
+            if not run_dir.is_dir():
+                continue
+            try:
+                if mode == "zip":
+                    _zip_rotate_run(run_dir, log_fn)
+                else:
+                    _delete_run(run_dir, log_fn)
+            except OSError as exc:  # pragma: no cover — defensive logging
+                log_fn(f"  Cleanup error on {run_dir}: {exc}")
+
+
+def _zip_rotate_run(run_dir: Path, log: Callable[[str], None]) -> None:
+    """Implement ``mode == "zip"`` for one run dir.
+
+    For every ``<app>/raw/`` directory found, write a sibling ``raw.zip`` and
+    remove the original tree; existing ``raw.zip`` files are left alone so
+    re-running cleanup is idempotent. Per-iter ``*_iter*.{json,csv}`` files
+    are then removed across the whole run, matching the bash dispatcher's
+    intent: keep ``summary.md`` / time-series CSVs, drop the bulky raw and
+    iteration-level artefacts.
+    """
+    import shutil
+
+    rel = run_dir.parent.name + "/" + run_dir.name
+    for raw_dir in sorted(run_dir.glob("*/raw")):
+        if not raw_dir.is_dir():
+            continue
+        zip_path = raw_dir.parent / "raw.zip"
+        if zip_path.exists():
+            continue
+        log(f"  Zipping raw logs: {rel}/{raw_dir.parent.name}/raw")
+        # ``shutil.make_archive`` writes ``<base>.zip`` — point ``base`` at the
+        # final path minus the suffix so we land on ``raw.zip`` next to the
+        # source dir, then remove the original tree only on success.
+        base = str(raw_dir.parent / "raw")
+        try:
+            shutil.make_archive(base, "zip", root_dir=raw_dir.parent, base_dir="raw")
+        except OSError as exc:
+            log(f"  Failed to zip {raw_dir}: {exc}")
+            continue
+        shutil.rmtree(raw_dir)
+    # The glob accepts the bash dispatcher's ``<TS>_iter<N>`` shape. Both
+    # extensions are removed because v0.1.1 reintroduces the per-iter CSV
+    # alongside the JSON; bash only had the JSON to clean up.
+    iter_files = list(run_dir.glob("*/*_iter*.json")) + list(run_dir.glob("*/*_iter*.csv"))
+    if iter_files:
+        log(f"  Removing {len(iter_files)} iteration file(s): {rel}")
+        for path in iter_files:
+            try:
+                path.unlink()
+            except OSError as exc:  # pragma: no cover — defensive logging
+                log(f"  Failed to remove {path}: {exc}")
+
+
+def _delete_run(run_dir: Path, log: Callable[[str], None]) -> None:
+    import shutil
+
+    rel = run_dir.parent.name + "/" + run_dir.name
+    log(f"  Deleting: {rel}")
+    shutil.rmtree(run_dir, ignore_errors=False)
+
+
+# Parse-rate threshold below which we warn the operator. The signal we care
+# about is "format mismatch" — a source whose every line fails to parse is
+# almost certainly producing output the configured format doesn't recognise,
+# and every probe will silently report "(no matches)" downstream. A floor of
+# five lines avoids flapping on tiny iters where a single noisy log line
+# could trip the warning.
+_PARSE_WARN_MIN_LINES = 5
+_PARSE_WARN_RATE = 0.0  # warn only when *no* line parses; tighten if needed.
+
+
+def _maybe_warn_parse_failure(
+    *,
+    name: str,
+    summary_path: Path,
+    log: Callable[[str], None],
+    warned: set[str],
+) -> None:
+    """Inspect an iteration summary for an unparseable-input pattern.
+
+    Records a line in ``monitor.log`` for every iteration that matches and
+    surfaces a one-time stderr nudge for each fresh app. The warning is
+    deliberately conservative — see :data:`_PARSE_WARN_MIN_LINES` — so a
+    healthy source whose first iter happens to drop a single non-JSON
+    keep-alive line doesn't trip it.
+    """
+    if not summary_path.exists():
+        return
+    try:
+        meta = json.loads(summary_path.read_text(encoding="utf-8")).get("meta", {})
+    except (OSError, json.JSONDecodeError):
+        return
+    total = int(meta.get("total_lines", 0) or 0)
+    parsed = int(meta.get("parsed", 0) or 0)
+    if total < _PARSE_WARN_MIN_LINES:
+        return
+    rate = parsed / total
+    if rate > _PARSE_WARN_RATE:
+        return
+    log(
+        f"Source {name!r}: {parsed}/{total} lines parsed — format may not match "
+        f"the captured log shape; configured probes will report no findings."
+    )
+    if name not in warned:
+        warned.add(name)
+        sys.stderr.write(
+            f"warning: source {name!r} captured {total} line(s) but parsed {parsed}; "
+            f"check [[sources]] format settings.\n"
+        )
+
+
 def run_monitor_loop(
     config: Config,
     *,
@@ -397,6 +624,17 @@ def run_monitor_loop(
         with monitor_log.open("a", encoding="utf-8") as f:
             f.write(f"[{_iso_log_ts(wall())}] {message}\n")
 
+    if monitor_cfg.cleanup_enabled:
+        # Rotate first so the new run dir we just created can never collide
+        # with a stale archive of the same name; cleanup_old_runs uses the
+        # date directory as its cutoff, so today's runs are always safe.
+        cleanup_old_runs(
+            config.root,
+            days=monitor_cfg.cleanup_days,
+            mode=monitor_cfg.cleanup_mode,
+            log=_log,
+            today=wall(),
+        )
     _log(f"Run dir: {run_dir}")
     _log(
         f"Sources: {', '.join(name for name, _ in sources)}; "
@@ -410,6 +648,10 @@ def run_monitor_loop(
     last_snapshot_mono = start_mono
     snapshots_enabled = monitor_cfg.analyse_every > 0
     stopped_early = False
+    # Apps for which we've already told the user the format isn't matching
+    # their lines. We still record the per-iteration warning in monitor.log
+    # (so the trail is complete) but skip stderr to avoid spamming.
+    parse_warned: set[str] = set()
 
     def _publish(*, finished: bool) -> None:
         if on_state is None:
@@ -441,9 +683,16 @@ def run_monitor_loop(
 
             iter_lines = 0
             iter_ts = now_wall.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
-            iter_label = f"iter_{iteration:04d}_{iter_ts}.log"
+            iter_label_base = f"{iter_ts}_iter{iteration}"
             for name, _src in sources:
-                iter_lines += _count_lines(run_dir / name / "raw" / iter_label)
+                app_dir = run_dir / name
+                iter_lines += _count_lines(app_dir / "raw" / f"{iter_label_base}.log")
+                _maybe_warn_parse_failure(
+                    name=name,
+                    summary_path=app_dir / f"{iter_label_base}.json",
+                    log=_log,
+                    warned=parse_warned,
+                )
             captured_total += iter_lines
             _log(f"Iteration {iteration}: captured {iter_lines} new line(s)")
 
