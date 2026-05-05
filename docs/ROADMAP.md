@@ -6,21 +6,18 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 ## Current state
 
 - **Last verified:** 2026-05-05
-- **Latest commit on `main`:** `Refresh roadmap after v0.1.0` (`75cd478`).
-  v0.1.0 cut as a version bump on `main`; v0.1.1 is in flight on
-  `bash-parity-restoration`. It restores the per-iter `<TS>_iter<N>.csv`
-  side-output, the `<TS>_iter<N>` filename pattern, in-process
-  `samples` line-cap (mirroring the bash dispatcher's `| tail -n N`
-  pipe), and automatic run-dir rotation (`zip` / `delete` modes), plus
-  the review fixes: `[[sources]].format_keys` for per-field JSON key
-  overrides, a parse-rate warning when sources fall below 50% parsed,
-  the `External errors and timeouts` probe heading replacing the
-  misleading `Database / external`, and ANSI stripping in
-  `paperbark search` (with `--keep-ansi` / `[search].keep_ansi` for
-  TTY-aware viewers).
+- **Latest commit on `main`:** `Restore bash-parity regressions and review
+  fixes` (`11d3dff`). v0.1.1 cut on `release/v0.1.1` lifts the merged
+  PR #15 work: per-iter `<TS>_iter<N>.csv` side-output, the
+  `<TS>_iter<N>` filename pattern, in-process `samples` line-cap
+  (mirroring the bash dispatcher's `| tail -n N` pipe), automatic
+  run-dir rotation (`zip` / `delete` modes), `[[sources]].format_keys`
+  for per-field JSON key overrides, the parse-rate warning, the
+  `External errors and timeouts` probe heading, and ANSI stripping in
+  `paperbark search` (with `--keep-ansi` / `[search].keep_ansi`).
 - **Repo:** <https://github.com/Good-Native/paperbark>
-- **Released:** v0.1.0 on 2026-05-04 (version bump only; PyPI and
-  Homebrew artefacts still pending).
+- **Released:** v0.1.1 on 2026-05-05 (first registry-bound release;
+  PyPI publish wired via GitHub Actions trusted publishing on tag push).
 - **Tests:** 407 passing across 27 test modules; CI has been green on
   every push since the `Land uv.lock and unblock CI` change.
 
