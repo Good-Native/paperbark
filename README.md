@@ -7,15 +7,13 @@ CloudWatch, plain files, stdin), runs a configurable set of probes over
 them, and writes a stable run-directory layout that downstream tooling can
 search across.
 
-> Status: v0.1.0 released. The probe, format, source (flyctl),
+> Status: v0.1.1 released to PyPI. The probe, format, source (flyctl),
 > iteration, aggregate, cursor-filter, search, dispatcher, and analyse
 > layers are all wired up; `paperbark monitor` runs end to end on a
 > configurable cadence with a `rich.live` ticker. See
 > [docs/ROADMAP.md](docs/ROADMAP.md) for current status.
 
 ## Install
-
-Once published:
 
 ```sh
 # pipx (recommended for CLI use)
@@ -32,6 +30,10 @@ For local development, see [CONTRIBUTING.md](CONTRIBUTING.md).
 ```sh
 # write a starter config in the current directory
 paperbark init
+
+# add at least one source — uncomment the [[sources]] block in
+# paperbark.toml and point `app` at your Fly app. monitor exits with
+# "no sources configured" until you do.
 
 # capture and analyse using config defaults (3s cadence, ~72 minutes)
 paperbark monitor
