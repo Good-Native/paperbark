@@ -26,6 +26,18 @@ jobs:
       - name: Set up Python
         run: uv python install 3.13
 
+      - name: Verify tag matches package version
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          tag_version="${REF_NAME#v}"
+          pkg_version=$(python3 -c 'import tomllib, pathlib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"])')
+          if [ "$tag_version" != "$pkg_version" ]; then
+            echo "::error::Tag $REF_NAME does not match pyproject.toml version $pkg_version" >&2
+            exit 1
+          fi
+          echo "Tag $REF_NAME matches package version $pkg_version"
+
       - name: Build sdist and wheel
         run: uv build
 
