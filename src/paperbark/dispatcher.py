@@ -32,7 +32,6 @@ from __future__ import annotations
 import json
 import random
 import re
-import sys
 import threading
 import time
 from collections.abc import Callable, Sequence
@@ -58,6 +57,7 @@ from paperbark.sources.flyctl import DEFAULT_SAMPLES as DEFAULT_FLYCTL_SAMPLES
 # Type aliases for the loop's injection points. Keeping them at module scope
 # avoids long inline ``Callable[...]`` annotations on every signature.
 StateCallback = Callable[["MonitorState"], None]
+StartCallback = Callable[["MonitorStart"], None]
 SnapshotRunner = Callable[[Path, Path | None], None]
 MonotonicClock = Callable[[], float]
 WallClock = Callable[[], datetime]
@@ -405,6 +405,20 @@ class MonitorResult:
     stopped_early: bool
 
 
+@dataclass(frozen=True)
+class MonitorStart:
+    """Run identifiers fired once before the loop begins.
+
+    The CLI uses this to render the bash-parity startup banner (rule + Run /
+    Sources / Interval / Iterations / Snapshots key-value rows) above the
+    live ticker. Tests can assert on it without parsing terminal output.
+    """
+
+    run_dir: Path
+    source_names: tuple[str, ...]
+    monitor: MonitorConfig
+
+
 def _resolve_run_slug(monitor: MonitorConfig, rng: random.Random | None) -> str:
     """Return the user-supplied or auto-generated run slug for a monitor run."""
     if monitor.run_id:
@@ -542,33 +556,28 @@ def _delete_run(run_dir: Path, log: Callable[[str], None]) -> None:
     shutil.rmtree(run_dir, ignore_errors=False)
 
 
-# Parse-rate threshold below which we warn the operator. The signal we care
-# about is "format mismatch" — a source whose lines mostly fail to parse is
-# almost certainly producing output the configured format doesn't fully
-# recognise, and probes downstream see a heavily depleted record set with no
-# diagnostic. The 50% floor catches both the "0 parsed" silent-failure case
-# and the "partially right format" case (e.g. an app with mixed JSON +
-# plain-text output where only a fraction of lines have an embedded record).
-# A minimum of five captured lines avoids flapping on tiny iters where a
-# single noisy log line could trip the warning.
+# Parse-rate threshold below which we record a format-mismatch hint to
+# ``monitor.log`` for post-mortem diagnosis. We deliberately do *not* surface
+# this on stderr — many healthy sources mix structured records with plain
+# keepalives, banners, or platform notices, so a low parse rate is a weak
+# signal in isolation. The bash reference never warned either; the line
+# stays in the run log so a real silent-failure case can still be traced.
 _PARSE_WARN_MIN_LINES = 5
 _PARSE_WARN_RATE = 0.5
 
 
-def _maybe_warn_parse_failure(
+def _maybe_log_parse_rate(
     *,
     name: str,
     summary_path: Path,
     log: Callable[[str], None],
-    warned: set[str],
 ) -> None:
-    """Inspect an iteration summary for an unparseable-input pattern.
+    """Append a format-mismatch hint to ``monitor.log`` when parse rate is low.
 
-    Records a line in ``monitor.log`` for every iteration that matches and
-    surfaces a one-time stderr nudge for each fresh app. The warning is
-    deliberately conservative — see :data:`_PARSE_WARN_MIN_LINES` — so a
-    healthy source whose first iter happens to drop a single non-JSON
-    keep-alive line doesn't trip it.
+    Silent on stderr by design — the CLI used to emit a one-time warning per
+    source but it false-positived on healthy mixed-format sources. The
+    monitor.log line is enough to investigate when probes downstream surface
+    a depleted record set.
     """
     if not summary_path.exists():
         return
@@ -589,12 +598,6 @@ def _maybe_warn_parse_failure(
         f"not match the captured log shape; probes downstream will see a "
         f"depleted record set."
     )
-    if name not in warned:
-        warned.add(name)
-        sys.stderr.write(
-            f"warning: source {name!r} parsed {parsed}/{total} line(s) ({pct}%); "
-            f"check [[sources]] format settings.\n"
-        )
 
 
 def run_monitor_loop(
@@ -603,6 +606,7 @@ def run_monitor_loop(
     monitor: MonitorConfig | None = None,
     built_sources: Sequence[tuple[str, Source]] | None = None,
     stop_event: threading.Event | None = None,
+    on_start: StartCallback | None = None,
     on_state: StateCallback | None = None,
     snapshot_runner: SnapshotRunner | None = None,
     rng: random.Random | None = None,
@@ -664,16 +668,21 @@ def run_monitor_loop(
         f"analyse_every={monitor_cfg.analyse_every}s"
     )
 
+    if on_start is not None:
+        on_start(
+            MonitorStart(
+                run_dir=run_dir,
+                source_names=tuple(name for name, _ in sources),
+                monitor=monitor_cfg,
+            )
+        )
+
     iteration = 0
     captured_total = 0
     start_mono = monotonic()
     last_snapshot_mono = start_mono
     snapshots_enabled = monitor_cfg.analyse_every > 0
     stopped_early = False
-    # Apps for which we've already told the user the format isn't matching
-    # their lines. We still record the per-iteration warning in monitor.log
-    # (so the trail is complete) but skip stderr to avoid spamming.
-    parse_warned: set[str] = set()
 
     def _publish(*, finished: bool) -> None:
         if on_state is None:
@@ -709,11 +718,10 @@ def run_monitor_loop(
             for name, _src in sources:
                 app_dir = run_dir / name
                 iter_lines += _count_lines(app_dir / "raw" / f"{iter_label_base}.log")
-                _maybe_warn_parse_failure(
+                _maybe_log_parse_rate(
                     name=name,
                     summary_path=app_dir / f"{iter_label_base}.json",
                     log=_log,
-                    warned=parse_warned,
                 )
             captured_total += iter_lines
             _log(f"Iteration {iteration}: captured {iter_lines} new line(s)")

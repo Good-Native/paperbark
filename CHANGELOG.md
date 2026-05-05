@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `paperbark monitor` now prints a startup banner to the terminal — bash
+  parity with the reference's bracketed `── slug ──` block above the
+  ticker. Lists the run dir, configured sources, interval, iterations
+  (with duration hint), and snapshot cadence. Rich-styled with a TTY,
+  plain ASCII to stderr otherwise. Backed by a new
+  `dispatcher.MonitorStart` dataclass and `on_start` callback so other
+  consumers can hook in.
+
+### Changed
+
+- `paperbark monitor` no longer emits a stderr warning when a source's
+  parse rate falls below 50%. The bash reference never warned, and the
+  threshold false-positived on healthy mixed-format sources (apps that
+  interleave JSON records with plain keepalives or platform notices).
+  The diagnostic line stays in `monitor.log` so genuine silent-failure
+  cases can still be traced after the fact.
+
 ## [0.1.1] - 2026-05-05
 
 ### Added
