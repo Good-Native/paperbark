@@ -24,7 +24,7 @@ jobs:
           enable-cache: true
 
       - name: Set up Python
-        run: uv python install 3.13
+        run: uv python install --default 3.13
 
       - name: Verify tag matches package version
         env:
