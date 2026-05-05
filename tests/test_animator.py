@@ -40,8 +40,13 @@ def _state(
         (None, 0, {}, ["starting"], []),
         # Bounded run: iter/total, elapsed, captured, snapshot countdown all rendered.
         (
-            _state(iteration=4, iterations_max=10, elapsed_seconds=125, captured_total=2048,
-                   next_snapshot_seconds=42),
+            _state(
+                iteration=4,
+                iterations_max=10,
+                elapsed_seconds=125,
+                captured_total=2048,
+                next_snapshot_seconds=42,
+            ),
             0,
             {},
             ["4 / 10", "2m 5s", "2048", "next snapshot 42s"],
@@ -57,8 +62,13 @@ def _state(
         ),
         # Overrides keep the elapsed/snapshot clocks ticking between publishes.
         (
-            _state(iteration=2, iterations_max=5, elapsed_seconds=10, captured_total=100,
-                   next_snapshot_seconds=20),
+            _state(
+                iteration=2,
+                iterations_max=5,
+                elapsed_seconds=10,
+                captured_total=100,
+                next_snapshot_seconds=20,
+            ),
             0,
             {"elapsed_override": 15, "next_snapshot_override": 15},
             ["15s", "next snapshot 15s"],
@@ -100,8 +110,13 @@ def _wait_for(buf: io.StringIO, needle: str, *, timeout: float = 2.0) -> None:
 def test_monitor_animator_smoke_renders_to_console() -> None:
     buf = io.StringIO()
     console = Console(file=buf, force_terminal=True, width=120, color_system=None)
-    state = _state(iteration=3, iterations_max=10, elapsed_seconds=12, captured_total=99,
-                   next_snapshot_seconds=8)
+    state = _state(
+        iteration=3,
+        iterations_max=10,
+        elapsed_seconds=12,
+        captured_total=99,
+        next_snapshot_seconds=8,
+    )
     with MonitorAnimator(console, fps=20) as ticker:
         ticker.update(state)
         _wait_for(buf, "3 / 10")

@@ -336,7 +336,9 @@ def test_empty_root_exits_1(tmp_path: Path, capsys: pytest.CaptureFixture[str]) 
     assert "No runs matched" in err
 
 
-def test_match_output_and_summary_streams(fake_logs: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_match_output_and_summary_streams(
+    fake_logs: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     rc = main(
         [
             "search",
@@ -451,5 +453,3 @@ def test_search_toml_keep_ansi_true_drives_default(
     assert rc == 0
     out = capsys.readouterr().out
     assert "\x1b[" in out
-
-
