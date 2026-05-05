@@ -43,32 +43,23 @@ def test_merge_returns_base_when_no_flags_set() -> None:
     assert _merge_search_overrides(base, _ns()) == base
 
 
-def test_merge_keyword_replaces_toml() -> None:
-    base = SearchConfig(keywords=("panic", "fatal"))
-    result = _merge_search_overrides(base, _ns(keyword=["custom"]))
+def test_merge_applies_each_override() -> None:
+    # CLI ``--keyword`` replaces (not extends) the TOML keyword list; ``--max 0``
+    # is the documented "unlimited" sentinel and must round-trip.
+    base = SearchConfig(keywords=("panic", "fatal"), case_sensitive=False, max=10)
+    result = _merge_search_overrides(
+        base,
+        _ns(run="20260503", keyword=["custom"], case_sensitive=True, max=0),
+    )
+    assert result.run == "20260503"
     assert result.keywords == ("custom",)
-
-
-def test_merge_case_sensitive_flag_overrides() -> None:
-    base = SearchConfig(case_sensitive=False)
-    result = _merge_search_overrides(base, _ns(case_sensitive=True))
     assert result.case_sensitive is True
-
-
-def test_merge_max_zero_means_unlimited() -> None:
-    base = SearchConfig(max=10)
-    result = _merge_search_overrides(base, _ns(max=0))
     assert result.max == 0
 
 
 def test_merge_rejects_negative_max() -> None:
     with pytest.raises(ValueError, match=r"--max must be >= 0"):
         _merge_search_overrides(SearchConfig(), _ns(max=-1))
-
-
-def test_merge_run_override() -> None:
-    result = _merge_search_overrides(SearchConfig(), _ns(run="20260503"))
-    assert result.run == "20260503"
 
 
 # --- end-to-end TOML threading --------------------------------------------

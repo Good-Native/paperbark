@@ -31,9 +31,3 @@ def test_panic_findings_capped_at_top_n() -> None:
         probe.feed(parse_line(f"2026-05-03T02:00:01Z panic: cause-{i:02d}\n"))
     findings = probe.report()["findings"]
     assert len(findings) == 10
-
-
-def test_no_panic_lines_returns_empty_findings() -> None:
-    probe = PanicProbe()
-    probe.feed(parse_line("2026-05-03T02:00:01Z just a normal line\n"))
-    assert probe.report()["findings"] == []

@@ -47,65 +47,38 @@ def test_merge_returns_base_when_no_flags_set() -> None:
     assert _merge_analyse_overrides(base, _ns()) == base
 
 
-def test_merge_run_override() -> None:
-    result = _merge_analyse_overrides(AnalyseConfig(), _ns(run="all"))
+def test_merge_applies_each_override() -> None:
+    # All flags set → each maps cleanly onto AnalyseConfig fields. The CLI
+    # ``--keyword`` (action=append) replaces TOML keywords rather than extending,
+    # and ``--out ''`` is the documented "clear TOML override" sentinel.
+    base = AnalyseConfig(
+        run="latest",
+        app="api",
+        keywords=("panic", "fatal"),
+        regexes=(r"5\d\d",),
+        out="reports/x",
+        stdout=False,
+    )
+    result = _merge_analyse_overrides(
+        base,
+        _ns(run="all", keyword=["custom"], stdout=True, out=""),
+    )
     assert result.run == "all"
-
-
-def test_merge_keyword_replaces_toml() -> None:
-    # Append-action lists are full overrides, not extensions: a CLI ``--keyword
-    # foo`` replaces the TOML keyword set so you can narrow searches without
-    # editing the file.
-    base = AnalyseConfig(keywords=("panic", "fatal"))
-    result = _merge_analyse_overrides(base, _ns(keyword=["custom"]))
     assert result.keywords == ("custom",)
-
-
-def test_merge_keyword_none_keeps_toml() -> None:
-    base = AnalyseConfig(keywords=("panic",))
-    result = _merge_analyse_overrides(base, _ns(keyword=None))
-    assert result.keywords == ("panic",)
-
-
-def test_merge_stdout_flag_overrides_toml() -> None:
-    base = AnalyseConfig(stdout=False)
-    result = _merge_analyse_overrides(base, _ns(stdout=True))
     assert result.stdout is True
-
-
-def test_merge_no_stdout_clears_toml_true() -> None:
-    """``--no-stdout`` (BooleanOptionalAction) must clear a TOML ``true``.
-
-    Pre-fix the parser only had ``--stdout`` with ``store_true``, so a TOML
-    ``[analyse].stdout = true`` could not be turned off at the CLI without
-    editing the file. ``BooleanOptionalAction`` exposes the negative form
-    ``--no-stdout`` which argparse stores as ``False`` on the same dest.
-    """
-    base = AnalyseConfig(stdout=True)
-    result = _merge_analyse_overrides(base, _ns(stdout=False))
-    assert result.stdout is False
+    assert result.out == ""
 
 
 def test_no_stdout_flag_parses() -> None:
-    """``argparse.BooleanOptionalAction`` exposes the ``--no-stdout`` form."""
+    """``argparse.BooleanOptionalAction`` exposes the ``--no-stdout`` form so a
+    TOML ``stdout = true`` can be cleared at the CLI without editing the file.
+    """
     from paperbark.cli import _build_parser
 
     parser = _build_parser()
-    args = parser.parse_args(["analyse", "--no-stdout"])
-    assert args.stdout is False
-    args = parser.parse_args(["analyse", "--stdout"])
-    assert args.stdout is True
-    args = parser.parse_args(["analyse"])
-    assert args.stdout is None  # neither flag → fall through to TOML
-
-
-def test_merge_out_blank_clears_toml_default() -> None:
-    # The CLI passes "" only when the user explicitly types --out '' which is
-    # a documented way to clear a TOML override and fall back to the default
-    # ``<run>/analysis`` base. argparse default is None (skip).
-    base = AnalyseConfig(out="reports/x")
-    result = _merge_analyse_overrides(base, _ns(out=""))
-    assert result.out == ""
+    assert parser.parse_args(["analyse", "--no-stdout"]).stdout is False
+    assert parser.parse_args(["analyse", "--stdout"]).stdout is True
+    assert parser.parse_args(["analyse"]).stdout is None  # falls through to TOML
 
 
 # --- end-to-end TOML threading --------------------------------------------

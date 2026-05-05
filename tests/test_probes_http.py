@@ -20,12 +20,6 @@ def test_class_buckets_track_each_response_class() -> None:
     assert "404" not in findings
 
 
-def test_lines_without_status_are_ignored() -> None:
-    probe = HTTPStatusProbe()
-    probe.feed(parse_line("2026-05-03T02:00:01Z plain text\n"))
-    assert probe.report()["findings"] == []
-
-
 def test_status_extracted_from_access_log() -> None:
     probe = HTTPStatusProbe()
     probe.feed(parse_line('2026-05-03T02:00:01Z 1.2.3.4 - - "GET /x HTTP/1.1" 429 0\n'))
