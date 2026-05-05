@@ -26,20 +26,27 @@ _KEY_WIDTH = 10
 
 
 def _slug_from_run_dir(run_dir_name: str) -> str:
-    """Extract the human-readable slug from ``HHMM_<slug>_<settings>``.
+    """Extract the human-readable slug from ``HHMM_<slug>_<interval>_<duration>``.
 
-    Falls back to the directory name unchanged if the layout doesn't match —
-    any deviation from the run-dir contract is then immediately visible in
-    the banner rather than silently lost.
+    Splits from the right so a user-supplied ``run_id`` containing underscores
+    (e.g. ``--run-id my_custom``) survives intact. Falls back to the directory
+    name unchanged if the layout doesn't match — any deviation from the
+    run-dir contract is then immediately visible in the banner rather than
+    silently lost.
     """
     parts = run_dir_name.split("_", 1)
     if len(parts) != 2:
         return run_dir_name
     rest = parts[1]
-    settings_idx = rest.find("_")
-    if settings_idx == -1:
+    # Expected suffix is ``_<interval>_<duration>``; rsplit-2 keeps the slug
+    # whole. Anything shorter than three segments means the suffix is absent
+    # (older layout, hand-edited path) — return ``rest`` so the banner still
+    # shows something useful.
+    try:
+        slug, _interval, _duration = rest.rsplit("_", 2)
+    except ValueError:
         return rest
-    return rest[:settings_idx]
+    return slug
 
 
 def _build_rows(start: MonitorStart, *, show_quit_hint: bool) -> list[tuple[str, str]]:

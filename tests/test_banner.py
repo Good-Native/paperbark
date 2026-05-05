@@ -81,6 +81,20 @@ def test_render_banner_lines_falls_back_when_run_dir_lacks_slug() -> None:
     assert lines[0].startswith("── odd ")
 
 
+def test_render_banner_lines_preserves_underscore_in_user_run_id() -> None:
+    """A user-supplied ``run_id`` with underscores must survive intact.
+
+    The run-dir is ``HHMM_<slug>_<interval>_<duration>`` so a left-find on
+    ``_`` would clip ``my_custom`` to ``my``. Splitting from the right keeps
+    the slug whole.
+    """
+    lines = render_banner_lines(
+        _start(run_dir=Path("logs/20260503/1430_my_custom_3s_1h")),
+        show_quit_hint=False,
+    )
+    assert lines[0].startswith("── my_custom ")
+
+
 def test_print_banner_writes_plain_to_stderr_without_console(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
