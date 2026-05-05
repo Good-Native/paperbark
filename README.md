@@ -31,6 +31,10 @@ For local development, see [CONTRIBUTING.md](CONTRIBUTING.md).
 # write a starter config in the current directory
 paperbark init
 
+# add at least one source — uncomment the [[sources]] block in
+# paperbark.toml and point `app` at your Fly app. monitor exits with
+# "no sources configured" until you do.
+
 # capture and analyse using config defaults (3s cadence, ~72 minutes)
 paperbark monitor
 
