@@ -21,7 +21,7 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 - **Repo:** <https://github.com/Good-Native/paperbark>
 - **Released:** v0.1.0 on 2026-05-04 (version bump only; PyPI and
   Homebrew artefacts still pending).
-- **Tests:** 405 passing across 27 test modules; CI has been green on
+- **Tests:** 407 passing across 27 test modules; CI has been green on
   every push since the `Land uv.lock and unblock CI` change.
 
 ### Implementation status
