@@ -41,7 +41,4 @@ def test_empty_level_records_are_ignored() -> None:
     probe = SeverityProbe()
     probe.feed(parse_line("2026-05-03T02:00:01Z plain text no json\n"))
     assert probe.report()["findings"] == []
-
-
-def test_report_has_probe_name() -> None:
-    assert SeverityProbe().report()["name"] == "Severity"
+    assert probe.report()["name"] == "Severity"

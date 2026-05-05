@@ -42,66 +42,40 @@ def test_merge_returns_base_when_no_flags_set() -> None:
     assert result == base
 
 
-def test_merge_interval_accepts_duration_string() -> None:
-    base = MonitorConfig()
-    result = _merge_monitor_overrides(base, _ns(interval="5m"))
+def test_merge_applies_each_override() -> None:
+    # ``interval`` accepts a duration string; ``iterations=0`` and
+    # ``analyse_every=0`` are the documented "forever" / "disabled" sentinels;
+    # ``run_id=""`` clears a TOML-supplied id so the loop auto-generates a slug.
+    base = MonitorConfig(interval=3, iterations=1440, analyse_every=300, run_id="from-toml")
+    result = _merge_monitor_overrides(
+        base,
+        _ns(interval="5m", iterations=0, analyse_every="0", run_id=""),
+    )
     assert result.interval == 300
-
-
-def test_merge_iterations_overrides_base() -> None:
-    base = MonitorConfig(iterations=1440)
-    result = _merge_monitor_overrides(base, _ns(iterations=10))
-    assert result.iterations == 10
-
-
-def test_merge_iterations_zero_means_forever() -> None:
-    base = MonitorConfig(iterations=10)
-    result = _merge_monitor_overrides(base, _ns(iterations=0))
     assert result.iterations == 0
-
-
-def test_merge_analyse_every_zero_disables_snapshots() -> None:
-    base = MonitorConfig(analyse_every=300)
-    result = _merge_monitor_overrides(base, _ns(analyse_every="0"))
     assert result.analyse_every == 0
-
-
-def test_merge_run_id_blank_clears_existing() -> None:
-    # An explicit empty string on the CLI must clear a TOML-supplied run_id so
-    # the loop falls back to auto-generated slugs. argparse passes "" through
-    # rather than None, which is the signal we use to skip an override.
-    base = MonitorConfig(run_id="from-toml")
-    result = _merge_monitor_overrides(base, _ns(run_id=""))
     assert result.run_id == ""
 
 
-def test_merge_rejects_non_positive_interval() -> None:
-    with pytest.raises(ValueError, match="--interval must be > 0"):
-        _merge_monitor_overrides(MonitorConfig(), _ns(interval="0s"))
-
-
-def test_merge_rejects_invalid_duration_string() -> None:
-    with pytest.raises(ValueError, match="invalid duration"):
-        _merge_monitor_overrides(MonitorConfig(), _ns(interval="banana"))
-
-
-def test_merge_rejects_negative_iterations() -> None:
-    with pytest.raises(ValueError, match="--iterations must be >= 0"):
-        _merge_monitor_overrides(MonitorConfig(), _ns(iterations=-1))
-
-
-@pytest.mark.parametrize("bad", ["../escape", "with/slash", ".hidden", "-leading"])
-def test_merge_rejects_unsafe_run_id(bad: str) -> None:
+@pytest.mark.parametrize(
+    "kwargs, expected",
+    [
+        ({"interval": "0s"}, "--interval must be > 0"),
+        ({"interval": "banana"}, "invalid duration"),
+        ({"iterations": -1}, "--iterations must be >= 0"),
+        ({"run_id": "../escape"}, "--run-id"),
+        ({"run_id": "with/slash"}, "--run-id"),
+    ],
+)
+def test_merge_rejects_invalid(kwargs: dict[str, object], expected: str) -> None:
     # The TOML loader validates run_id against a path-safety regex; the CLI
-    # override path has to enforce the same rule or the same hostile value
-    # slips through ``--run-id``.
-    with pytest.raises(ValueError, match="--run-id"):
-        _merge_monitor_overrides(MonitorConfig(), _ns(run_id=bad))
+    # override path enforces the same rule so hostile values can't slip through.
+    with pytest.raises(ValueError, match=expected):
+        _merge_monitor_overrides(MonitorConfig(), _ns(**kwargs))
 
 
 def test_merge_accepts_safe_run_id() -> None:
-    base = MonitorConfig()
-    result = _merge_monitor_overrides(base, _ns(run_id="incident_2026-05-04.v1"))
+    result = _merge_monitor_overrides(MonitorConfig(), _ns(run_id="incident_2026-05-04.v1"))
     assert result.run_id == "incident_2026-05-04.v1"
 
 

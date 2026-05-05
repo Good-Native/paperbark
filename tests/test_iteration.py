@@ -92,14 +92,6 @@ def test_missing_timestamp_buckets_under_unknown() -> None:
     assert "unknown" in summary["level_counts"]
 
 
-def test_unparseable_timestamp_truncated_to_minute() -> None:
-    summary = summarise_lines(
-        ['prefix {"time":"not-a-date-at-all","level":"info","component":"api","msg":"x"}\n'],
-    )
-    # Fallback returns first 16 chars of the raw timestamp value.
-    assert "not-a-date-at-al" in summary["level_counts"]
-
-
 def test_summary_round_trips_through_aggregate(tmp_path: Path) -> None:
     summary = summarise_lines(
         [

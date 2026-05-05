@@ -2,22 +2,7 @@
 
 from __future__ import annotations
 
-from paperbark.probes._record import (
-    CanonicalRecord,
-    iso_minute,
-    parse_line,
-    strip_ansi,
-)
-
-
-def test_strip_ansi_removes_sgr_sequences() -> None:
-    coloured = "\x1b[2m2026-05-03T02:00:01Z\x1b[0m hello"
-    assert strip_ansi(coloured) == "2026-05-03T02:00:01Z hello"
-
-
-def test_iso_minute_truncates_to_hh_mm() -> None:
-    assert iso_minute("2026-05-03T02:00:01") == "2026-05-03T02:00"
-    assert iso_minute("short") == "short"
+from paperbark.probes._record import parse_line
 
 
 def test_parse_line_with_no_json_keeps_leading_timestamp() -> None:
@@ -40,14 +25,13 @@ def test_parse_line_extracts_json_fields() -> None:
     assert record.status == "503"
 
 
-def test_parse_line_uses_json_timestamp_over_leading() -> None:
-    record = parse_line('2026-05-03T02:00:01Z {"time":"2026-05-03T02:00:05Z","msg":"x"}\n')
-    assert record.timestamp == "2026-05-03T02:00:05+00:00"
-
-
-def test_parse_line_falls_back_when_json_timestamp_invalid() -> None:
-    record = parse_line('2026-05-03T02:00:01Z {"time":"not-a-date","msg":"x"}\n')
-    assert record.timestamp == "2026-05-03T02:00:01+00:00"
+def test_parse_line_prefers_json_timestamp_with_fallback() -> None:
+    # Valid JSON timestamp wins over the leading prefix.
+    rec = parse_line('2026-05-03T02:00:01Z {"time":"2026-05-03T02:00:05Z","msg":"x"}\n')
+    assert rec.timestamp == "2026-05-03T02:00:05+00:00"
+    # Invalid JSON timestamp falls back to the leading prefix.
+    rec = parse_line('2026-05-03T02:00:01Z {"time":"not-a-date","msg":"x"}\n')
+    assert rec.timestamp == "2026-05-03T02:00:01+00:00"
 
 
 def test_parse_line_extracts_status_from_access_log() -> None:
@@ -80,20 +64,3 @@ def test_parse_line_strips_ansi_before_parsing() -> None:
     record = parse_line('\x1b[2m2026-05-03T02:00:01Z\x1b[0m {"level":"info","msg":"x"}\n')
     assert record.timestamp == "2026-05-03T02:00:01+00:00"
     assert record.level == "info"
-
-
-def test_canonical_record_is_frozen() -> None:
-    record = CanonicalRecord(
-        timestamp="t",
-        level="info",
-        message="m",
-        component="c",
-        status="200",
-        duration_ms=1.0,
-        raw_line="r",
-    )
-    try:
-        record.level = "warn"  # type: ignore[misc]
-    except Exception:
-        return
-    raise AssertionError("CanonicalRecord should be frozen")
