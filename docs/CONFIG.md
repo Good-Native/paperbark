@@ -121,9 +121,11 @@ Defaults for `paperbark search`. Every field is also a CLI flag.
 | `regexes`        | array of strings | `[]`       | Repeatable regex terms.                                                                          |
 | `case_sensitive` | boolean          | `false`    | Strict matching (default off; case-insensitive).                                                 |
 | `max`            | integer          | `0`        | Stop after N total matches. `0` is unlimited. Must be `>= 0`.                                    |
+| `keep_ansi`      | boolean          | `false`    | Preserve ANSI escape sequences in matched lines (default strips them so pipes stay readable).    |
 
 CLI flags: `--run`, `--root`, `--app`, repeatable `--keyword` / `--regex`,
-`--case-sensitive` / `--ignore-case` (mutually exclusive), `--max`.
+`--case-sensitive` / `--ignore-case` (mutually exclusive), `--max`,
+`--keep-ansi` / `--no-keep-ansi`.
 
 A TOML-supplied `[search].keywords` or `[search].regexes` drives matching
 even when no `--keyword` / `--regex` flag is supplied. As with analyse,
@@ -248,11 +250,11 @@ a major version.
 
 ```text
 <root>/YYYYMMDD/HHMM_<slug>_<settings>/
-├── <app>/raw/<HHMMSSZ>_iter<N>.log   # cursor-filtered captures
-├── <app>/<HHMMSSZ>_iter<N>.json      # per-iter aggregator input
-├── <app>/<HHMMSSZ>_iter<N>.csv       # flat per-line side-output
-├── <app>/.cursor                     # last-seen ISO timestamp
-├── <app>/summary.md                  # cumulative aggregator summary
+├── <app>/raw/<YYYYMMDDTHHMMSSZ>_iter<N>.log   # cursor-filtered captures
+├── <app>/<YYYYMMDDTHHMMSSZ>_iter<N>.json      # per-iter aggregator input
+├── <app>/<YYYYMMDDTHHMMSSZ>_iter<N>.csv       # flat per-line side-output
+├── <app>/.cursor                              # last-seen ISO timestamp
+├── <app>/summary.md                           # cumulative aggregator summary
 ├── <app>/{time_series,events_per_minute,components_per_minute}.csv
 ├── snapshots/
 │   ├── analysis_<HHMMSS>Z.md
@@ -260,6 +262,11 @@ a major version.
 ├── analysis.md / analysis.json
 └── monitor.log
 ```
+
+The per-iter `<YYYYMMDDTHHMMSSZ>` token is the iteration's wall-clock
+UTC timestamp at capture start — e.g. `20260504T224503Z_iter1.log`.
+The snapshot suffix in `snapshots/` only carries the `<HHMMSS>Z` half
+because snapshots always live under a dated run dir.
 
 After a `cleanup_mode = "zip"` rotation, each older run dir keeps its
 `<app>/summary.md` and `<app>/{time_series,events_per_minute,components_per_minute}.csv`,

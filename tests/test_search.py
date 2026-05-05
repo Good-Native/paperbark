@@ -450,6 +450,64 @@ def test_search_keep_ansi_preserves_escape_sequences(
     assert "\x1b[" in out
 
 
+def test_search_toml_keep_ansi_true_drives_default(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A ``[search].keep_ansi = true`` in TOML must drive matching even with
+    no flag at the CLI; CLAUDE.md's contract is that every flag has a TOML
+    key. Without this plumbing the option would be CLI-only.
+    """
+    root = tmp_path / "logs"
+    coloured = "\x1b[2m2026-05-04T21:19:02Z\x1b[0m app panic: db down\n"
+    _write(root / "20260504" / "1430_run_x" / "app1" / "raw" / "a.log", coloured)
+    config_path = tmp_path / "paperbark.toml"
+    config_path.write_text(
+        '[paperbark]\nroot = "logs"\n\n[search]\nkeep_ansi = true\n', encoding="utf-8"
+    )
+    rc = main(
+        [
+            "search",
+            "--config",
+            str(config_path),
+            "--root",
+            str(root),
+            "--keyword",
+            "panic",
+        ]
+    )
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "\x1b[" in out
+
+
+def test_search_no_keep_ansi_clears_toml_true(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--no-keep-ansi`` must override a TOML ``true`` at runtime."""
+    root = tmp_path / "logs"
+    coloured = "\x1b[2m2026-05-04T21:19:02Z\x1b[0m app panic: db down\n"
+    _write(root / "20260504" / "1430_run_x" / "app1" / "raw" / "a.log", coloured)
+    config_path = tmp_path / "paperbark.toml"
+    config_path.write_text(
+        '[paperbark]\nroot = "logs"\n\n[search]\nkeep_ansi = true\n', encoding="utf-8"
+    )
+    rc = main(
+        [
+            "search",
+            "--config",
+            str(config_path),
+            "--root",
+            str(root),
+            "--keyword",
+            "panic",
+            "--no-keep-ansi",
+        ]
+    )
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "\x1b[" not in out
+
+
 def test_keyboard_interrupt_exits_130(monkeypatch: pytest.MonkeyPatch) -> None:
     """SIGINT during a search returns exit code 130 (the documented contract)."""
     import paperbark.search as search_mod

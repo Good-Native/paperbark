@@ -8,13 +8,20 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 - **Last verified:** 2026-05-05
 - **Latest commit on `main`:** `Refresh roadmap after v0.1.0` (`75cd478`).
   v0.1.0 cut as a version bump on `main`; v0.1.1 is in flight on
-  `bash-parity-restoration` and restores the missing per-iter CSV
-  side-output, cleanup/rotation, the flyctl `-n samples` knob, and the
-  filename-pattern revert flagged by the bash-parity audit.
+  `bash-parity-restoration`. It restores the per-iter `<TS>_iter<N>.csv`
+  side-output, the `<TS>_iter<N>` filename pattern, in-process
+  `samples` line-cap (mirroring the bash dispatcher's `| tail -n N`
+  pipe), and automatic run-dir rotation (`zip` / `delete` modes), plus
+  the review fixes: `[[sources]].format_keys` for per-field JSON key
+  overrides, a parse-rate warning when sources fall below 50% parsed,
+  the `External errors and timeouts` probe heading replacing the
+  misleading `Database / external`, and ANSI stripping in
+  `paperbark search` (with `--keep-ansi` / `[search].keep_ansi` for
+  TTY-aware viewers).
 - **Repo:** <https://github.com/Good-Native/paperbark>
 - **Released:** v0.1.0 on 2026-05-04 (version bump only; PyPI and
   Homebrew artefacts still pending).
-- **Tests:** 402 passing across 27 test modules; CI has been green on
+- **Tests:** 405 passing across 27 test modules; CI has been green on
   every push since the `Land uv.lock and unblock CI` change.
 
 ### Implementation status

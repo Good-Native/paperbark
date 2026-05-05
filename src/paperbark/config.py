@@ -197,7 +197,8 @@ class SearchConfig:
     that both write to the ``case_sensitive`` dest, so either flag can clear
     or set the TOML default at runtime. ``max = 0`` is the documented
     sentinel for "unlimited matches" and matches the bash dispatcher's
-    behaviour.
+    behaviour. ``keep_ansi`` defaults to ``false`` so piped/redirected
+    output stays readable; ``--keep-ansi`` on the CLI overrides at runtime.
     """
 
     run: str = "latest"
@@ -206,6 +207,7 @@ class SearchConfig:
     regexes: tuple[str, ...] = ()
     case_sensitive: bool = False
     max: int = 0
+    keep_ansi: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -464,6 +466,7 @@ def _parse_search(raw: Any) -> SearchConfig:
             table.get("case_sensitive", False), "[search].case_sensitive"
         ),
         max=max_raw,
+        keep_ansi=_parse_bool_field(table.get("keep_ansi", False), "[search].keep_ansi"),
     )
 
 

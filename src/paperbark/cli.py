@@ -174,12 +174,18 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Stop after N total matches (0 = unlimited). Overrides [search].max.",
     )
+    # ``BooleanOptionalAction`` so a TOML ``[search].keep_ansi = true`` can
+    # be cleared at the CLI with ``--no-keep-ansi``. ``default=None`` keeps
+    # "flag absent" distinguishable from "explicit False" so the merge step
+    # falls through to TOML.
     search.add_argument(
         "--keep-ansi",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=None,
         help=(
             "Preserve ANSI escape sequences in matched lines. By default they"
-            " are stripped so piped/redirected output stays readable."
+            " are stripped so piped/redirected output stays readable;"
+            " --no-keep-ansi clears a [search].keep_ansi = true."
         ),
     )
 
@@ -585,7 +591,7 @@ def _run_search(args: argparse.Namespace) -> int:
             regex=list(search_cfg.regexes),
             case_sensitive=search_cfg.case_sensitive,
             max=search_cfg.max,
-            keep_ansi=bool(getattr(args, "keep_ansi", False)),
+            keep_ansi=search_cfg.keep_ansi,
         )
     )
 
@@ -670,6 +676,7 @@ def _merge_search_overrides(
     regexes = base.regexes
     case_sensitive = base.case_sensitive
     max_matches = base.max
+    keep_ansi = base.keep_ansi
 
     run_arg = getattr(args, "run", None)
     if run_arg is not None:
@@ -697,6 +704,10 @@ def _merge_search_overrides(
             raise ValueError("--max must be >= 0 (0 = unlimited)")
         max_matches = max_arg
 
+    keep_ansi_arg = getattr(args, "keep_ansi", None)
+    if keep_ansi_arg is not None:
+        keep_ansi = bool(keep_ansi_arg)
+
     return SearchConfig(
         run=run_value,
         app=app,
@@ -704,6 +715,7 @@ def _merge_search_overrides(
         regexes=regexes,
         case_sensitive=case_sensitive,
         max=max_matches,
+        keep_ansi=keep_ansi,
     )
 
 

@@ -743,9 +743,11 @@ def test_capture_iteration_uses_source_format_keys(tmp_path: Path) -> None:
     raw_log, summary_json = capture_iteration(source, tmp_path / "app", 1, now=fixed)
     summary = json.loads(summary_json.read_text(encoding="utf-8"))
     assert summary["meta"]["parsed"] == 1
-    # Component bucket should pick up the overridden ``service`` key.
+    # Component bucket should pick up the overridden ``service`` key. Scan
+    # every per-minute bucket rather than just the first so the assertion
+    # doesn't drift if dict iteration order changes.
     component_counts = summary["component_counts"]
-    assert "api" in next(iter(component_counts.values()))
+    assert any("api" in bucket for bucket in component_counts.values())
     raw_log.unlink()
 
 
@@ -763,6 +765,8 @@ def _seed_old_run(root: Path, date: str, run_name: str) -> Path:
 
 
 def test_cleanup_zip_archives_raw_and_strips_iter_files(tmp_path: Path) -> None:
+    import zipfile
+
     from paperbark.dispatcher import cleanup_old_runs
 
     today = datetime(2026, 5, 5, tzinfo=UTC)
@@ -771,6 +775,12 @@ def test_cleanup_zip_archives_raw_and_strips_iter_files(tmp_path: Path) -> None:
     # raw/ tree replaced by raw.zip
     assert not (old / "app1" / "raw").exists()
     assert (old / "app1" / "raw.zip").exists()
+    # The archive must contain the seeded raw log; this catches regressions
+    # where ``shutil.make_archive`` is called with the wrong base/root_dir
+    # combination and produces an empty or wrong-tree zip.
+    with zipfile.ZipFile(old / "app1" / "raw.zip") as zf:
+        names = zf.namelist()
+    assert "raw/20260101T000000Z_iter1.log" in names
     # iter JSON + CSV stripped, summary kept.
     assert not (old / "app1" / "20260101T000000Z_iter1.json").exists()
     assert not (old / "app1" / "20260101T000000Z_iter1.csv").exists()

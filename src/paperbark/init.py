@@ -78,6 +78,10 @@ regexes = []
 case_sensitive = false
 # Stop after N total matches (0 = unlimited).
 max = 0
+# Preserve ANSI escape sequences in matched lines (default off — Fly's
+# coloured timestamp prefix renders as garbage in pipes/files). Use
+# --keep-ansi / --no-keep-ansi on the CLI to override at runtime.
+keep_ansi = false
 
 
 # Probe toggles. Set any to false to disable that probe entirely.

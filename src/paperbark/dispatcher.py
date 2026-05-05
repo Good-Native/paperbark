@@ -10,10 +10,10 @@ A run-dir laid out per :data:`docs/ROADMAP.md`'s public-contract section
 is created on the first call and reused for every subsequent iteration::
 
     logs/YYYYMMDD/HHMM_<slug>_<settings>/
-    ├── <app>/raw/<HHMMSSZ>_iter<N>.log
+    ├── <app>/raw/<YYYYMMDDTHHMMSSZ>_iter<N>.log
     ├── <app>/.cursor
-    ├── <app>/<HHMMSSZ>_iter<N>.json
-    ├── <app>/<HHMMSSZ>_iter<N>.csv          # flat per-line side-output
+    ├── <app>/<YYYYMMDDTHHMMSSZ>_iter<N>.json
+    ├── <app>/<YYYYMMDDTHHMMSSZ>_iter<N>.csv  # flat per-line side-output
     ├── <app>/time_series.csv
     ├── <app>/events_per_minute.csv
     ├── <app>/components_per_minute.csv
@@ -485,6 +485,7 @@ def _zip_rotate_run(run_dir: Path, log: Callable[[str], None]) -> None:
     iteration-level artefacts.
     """
     import shutil
+    import zipfile
 
     rel = run_dir.parent.name + "/" + run_dir.name
     for raw_dir in sorted(run_dir.glob("*/raw")):
@@ -496,12 +497,28 @@ def _zip_rotate_run(run_dir: Path, log: Callable[[str], None]) -> None:
         log(f"  Zipping raw logs: {rel}/{raw_dir.parent.name}/raw")
         # ``shutil.make_archive`` writes ``<base>.zip`` — point ``base`` at the
         # final path minus the suffix so we land on ``raw.zip`` next to the
-        # source dir, then remove the original tree only on success.
+        # source dir, then verify the archive is readable before removing the
+        # original tree. ``testzip()`` returns the name of the first bad
+        # member or ``None`` if every entry's CRC checks out.
         base = str(raw_dir.parent / "raw")
         try:
             shutil.make_archive(base, "zip", root_dir=raw_dir.parent, base_dir="raw")
         except OSError as exc:
             log(f"  Failed to zip {raw_dir}: {exc}")
+            continue
+        try:
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                bad_member = zf.testzip()
+        except (zipfile.BadZipFile, OSError) as exc:
+            log(f"  Archive verification failed for {zip_path} ({exc}); keeping {raw_dir}")
+            zip_path.unlink(missing_ok=True)
+            continue
+        if bad_member is not None:
+            log(
+                f"  Archive verification failed for {zip_path} "
+                f"(corrupt member {bad_member!r}); keeping {raw_dir}"
+            )
+            zip_path.unlink(missing_ok=True)
             continue
         shutil.rmtree(raw_dir)
     # The glob accepts the bash dispatcher's ``<TS>_iter<N>`` shape. Both
