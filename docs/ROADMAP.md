@@ -212,6 +212,21 @@ Carry these into the Python port:
 - External `Source` plugin loader (interface documented; loader not
   shipped).
 
+## v0.2 shortlist
+
+- **Wire regex-format presets into iteration.** The format layer already
+  ships `JsonKeysFormat` (default, used today), `RegexFormat`, and three
+  presets (`apache-combined`, `nginx-default`, `syslog-rfc5424`), but
+  only the JSON path is reachable from `[[sources]]`. v0.2 adds a
+  `format = "<preset>"` (or inline `RegexFormat` definition) on each
+  `[[sources]]` entry so non-JSON payloads (pipe-delimited, syslog,
+  Apache, nginx, custom shapes via named-group regex) parse correctly.
+  Until then, non-JSON sources trip the format-mismatch warning.
+- Real implementations for the five stub sources (`wrangler`,
+  `kubectl`, `cloudwatch`, `file`, `stdin`).
+- Per-source probe overrides (today probe toggles and
+  `[probes.patterns]` are global).
+
 ## Beyond v1 (parking lot)
 
 - External plugin loader for third-party `Source` and `Format` modules.
