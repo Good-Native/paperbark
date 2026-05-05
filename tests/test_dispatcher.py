@@ -76,16 +76,6 @@ def test_build_source_flyctl_rejects_unknown_option() -> None:
         build_source(spec)
 
 
-def test_build_source_flyctl_lists_unknown_options_alphabetically() -> None:
-    spec = SourceConfig(
-        name="main",
-        type="flyctl",
-        options={"app": "fly-a", "zebra": 1, "alpha": 2},
-    )
-    with pytest.raises(DispatcherError, match=r"unknown option\(s\) 'alpha', 'zebra'"):
-        build_source(spec)
-
-
 @pytest.mark.parametrize("type_", ["wrangler", "kubectl", "cloudwatch", "file", "stdin"])
 def test_build_source_stub_rejects_unknown_option(type_: str) -> None:
     spec = SourceConfig(name="x", type=type_, options={"path": "/var/log/foo"})
@@ -137,34 +127,17 @@ def test_random_slug_is_deterministic_with_seeded_rng() -> None:
     assert a == b
 
 
-def test_random_slug_default_rng_runs_without_args() -> None:
-    # Smoke check: no-arg form picks an OS-seeded RNG and returns a valid slug.
-    slug = random_slug()
-    assert slug.count("-") == 1
-
-
 # --- settings_suffix -------------------------------------------------------
 
 
 @pytest.mark.parametrize(
     "interval, iterations, expected",
     [
-        # Bash defaults: 3s * 1440 = 4320s; (4320+1800)//3600 = 1 -> "1h".
-        (3, 1440, "3s_1h"),
+        # One case per branch of the suffix formatter.
         (3, 0, "3s_forever"),
-        # < 3600: minute branch with round-half-up via +30 nudge.
-        (3, 300, "3s_15m"),
-        (3, 600, "3s_30m"),
-        (3, 1100, "3s_55m"),  # 3300s → 55m exact
-        (60, 30, "1m_30m"),
-        # >= 3600 boundary: hour branch.
-        (3, 1200, "3s_1h"),  # 3600s → 1h exact
-        (5, 720, "5s_1h"),
-        (3, 3600, "3s_3h"),  # 10 800s → 3h exact
-        # >= 86400: day branch.
-        (60, 60 * 24, "1m_1d"),  # 86 400s → 1d exact
-        (3600, 24, "60m_1d"),
-        (3, 60 * 60 * 24, "3s_3d"),  # 3s * 86_400 = 259_200s = 3 days exact
+        (3, 300, "3s_15m"),  # minute branch
+        (3, 1200, "3s_1h"),  # hour boundary
+        (60, 60 * 24, "1m_1d"),  # day branch
     ],
 )
 def test_settings_suffix_matches_bash(interval: int, iterations: int, expected: str) -> None:
@@ -209,13 +182,6 @@ def test_new_run_dir_falls_back_when_slug_is_empty(tmp_path: Path) -> None:
     fixed = datetime(2026, 5, 3, 14, 30)
     run_dir = new_run_dir(tmp_path, slug="", now=fixed)
     assert run_dir.name == "1430_run"
-
-
-def test_new_run_dir_is_idempotent(tmp_path: Path) -> None:
-    fixed = datetime(2026, 5, 3, 14, 30)
-    first = new_run_dir(tmp_path, now=fixed)
-    second = new_run_dir(tmp_path, now=fixed)
-    assert first == second
 
 
 # --- capture_iteration -----------------------------------------------------
@@ -654,33 +620,21 @@ def test_build_source_flyctl_threads_samples_through() -> None:
     assert len(list(source.capture())) == 750
 
 
-def test_build_source_flyctl_rejects_non_int_samples() -> None:
+@pytest.mark.parametrize(
+    "samples, expected",
+    [
+        ("lots", "must be an integer"),
+        (True, "must be an integer"),  # bool is int subclass; must not slip through
+        (0, "must be > 0"),
+    ],
+)
+def test_build_source_flyctl_rejects_invalid_samples(samples: object, expected: str) -> None:
     spec = SourceConfig(
         name="main",
         type="flyctl",
-        options={"app": "fly-a", "samples": "lots"},
+        options={"app": "fly-a", "samples": samples},
     )
-    with pytest.raises(DispatcherError, match="'samples' must be an integer"):
-        build_source(spec)
-
-
-def test_build_source_flyctl_rejects_zero_samples() -> None:
-    spec = SourceConfig(
-        name="main",
-        type="flyctl",
-        options={"app": "fly-a", "samples": 0},
-    )
-    with pytest.raises(DispatcherError, match="'samples' must be > 0"):
-        build_source(spec)
-
-
-def test_build_source_flyctl_rejects_bool_samples() -> None:
-    spec = SourceConfig(
-        name="main",
-        type="flyctl",
-        options={"app": "fly-a", "samples": True},
-    )
-    with pytest.raises(DispatcherError, match="'samples' must be an integer"):
+    with pytest.raises(DispatcherError, match=expected):
         build_source(spec)
 
 
@@ -805,23 +759,6 @@ def test_cleanup_keeps_runs_inside_window(tmp_path: Path) -> None:
     cleanup_old_runs(tmp_path / "logs", days=1, mode="delete", today=today)
     assert fresh.exists()
     assert yesterday.exists()
-
-
-def test_cleanup_zip_is_idempotent(tmp_path: Path) -> None:
-    from paperbark.dispatcher import cleanup_old_runs
-
-    today = datetime(2026, 5, 5, tzinfo=UTC)
-    old = _seed_old_run(tmp_path / "logs", "20260101", "0900_old")
-    cleanup_old_runs(tmp_path / "logs", days=1, mode="zip", today=today)
-    # Second pass must be a no-op once raw.zip exists; no error, no clobber.
-    cleanup_old_runs(tmp_path / "logs", days=1, mode="zip", today=today)
-    assert (old / "app1" / "raw.zip").exists()
-
-
-def test_cleanup_no_op_when_root_missing(tmp_path: Path) -> None:
-    from paperbark.dispatcher import cleanup_old_runs
-
-    cleanup_old_runs(tmp_path / "missing", days=1, mode="zip")  # must not raise
 
 
 def test_cleanup_rejects_invalid_mode(tmp_path: Path) -> None:

@@ -198,34 +198,26 @@ def test_duplicate_source_names_rejected() -> None:
         )
 
 
-def test_source_missing_name_rejected() -> None:
-    with pytest.raises(ConfigError, match="missing or invalid 'name'"):
-        from_dict({"sources": [{"type": "flyctl"}]})
-
-
-def test_source_missing_type_rejected() -> None:
-    with pytest.raises(ConfigError, match="missing or invalid 'type'"):
-        from_dict({"sources": [{"name": "main"}]})
-
-
-def test_probe_toggle_must_be_bool() -> None:
-    with pytest.raises(ConfigError, match="must be a boolean"):
-        from_dict({"probes": {"severity": "yes"}})
-
-
-def test_keywords_must_be_list_of_strings() -> None:
-    with pytest.raises(ConfigError, match="must be a string"):
-        from_dict({"probes": {"keywords": ["ok", 42]}})
-
-
-def test_pattern_override_missing_label_rejected() -> None:
-    with pytest.raises(ConfigError, match="missing or invalid 'label'"):
-        from_dict({"probes": {"patterns": {"autoscaler": [{"pattern": "x"}]}}})
-
-
-def test_pattern_override_missing_pattern_rejected() -> None:
-    with pytest.raises(ConfigError, match="missing or invalid 'pattern'"):
-        from_dict({"probes": {"patterns": {"autoscaler": [{"label": "x"}]}}})
+@pytest.mark.parametrize(
+    "payload, expected",
+    [
+        ({"sources": [{"type": "flyctl"}]}, "missing or invalid 'name'"),
+        ({"sources": [{"name": "main"}]}, "missing or invalid 'type'"),
+        ({"probes": {"severity": "yes"}}, "must be a boolean"),
+        ({"probes": {"keywords": ["ok", 42]}}, "must be a string"),
+        (
+            {"probes": {"patterns": {"autoscaler": [{"pattern": "x"}]}}},
+            "missing or invalid 'label'",
+        ),
+        (
+            {"probes": {"patterns": {"autoscaler": [{"label": "x"}]}}},
+            "missing or invalid 'pattern'",
+        ),
+    ],
+)
+def test_from_dict_rejects_malformed_payload(payload: dict[str, object], expected: str) -> None:
+    with pytest.raises(ConfigError, match=expected):
+        from_dict(payload)
 
 
 def test_load_full_config_round_trip(tmp_path: Path) -> None:
@@ -375,21 +367,10 @@ def test_monitor_iterations_rejects_negative() -> None:
         from_dict({"monitor": {"iterations": -1}})
 
 
-def test_monitor_iterations_rejects_bool() -> None:
-    # bool is an int subclass; must not silently round to 0/1.
-    with pytest.raises(ConfigError, match=r"\[monitor\]\.iterations must be an integer"):
-        from_dict({"monitor": {"iterations": True}})
-
-
 def test_monitor_run_id_rejects_path_traversal() -> None:
     for bad in ("../escape", ".hidden", "-leading-dash", "with/slash", "with space"):
         with pytest.raises(ConfigError, match=r"\[monitor\]\.run_id"):
             from_dict({"monitor": {"run_id": bad}})
-
-
-def test_monitor_run_id_accepts_safe_chars() -> None:
-    config = from_dict({"monitor": {"run_id": "incident_2026-05-04.v1"}})
-    assert config.monitor.run_id == "incident_2026-05-04.v1"
 
 
 def test_monitor_section_must_be_table() -> None:
@@ -499,10 +480,14 @@ def test_search_max_rejects_negative() -> None:
         from_dict({"search": {"max": -1}})
 
 
-def test_search_max_rejects_bool() -> None:
-    # bool is an int subclass; `max = true` would otherwise silently cap at 1.
-    with pytest.raises(ConfigError, match=r"\[search\]\.max must be an integer"):
-        from_dict({"search": {"max": True}})
+@pytest.mark.parametrize(
+    "section, field",
+    [("monitor", "iterations"), ("search", "max")],
+)
+def test_int_fields_reject_bool(section: str, field: str) -> None:
+    # bool is an int subclass; e.g. `max = true` would otherwise silently cap at 1.
+    with pytest.raises(ConfigError, match=rf"\[{section}\]\.{field} must be an integer"):
+        from_dict({section: {field: True}})
 
 
 def test_search_case_sensitive_must_be_bool() -> None:

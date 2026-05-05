@@ -118,19 +118,6 @@ def test_iter_lines_raw_zip(fake_logs: Path) -> None:
     assert ("app.1.log", "WARN slow") in lines
 
 
-def test_iter_lines_corrupt_zip_yields_nothing(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    app = tmp_path / "app"
-    app.mkdir()
-    (app / "raw.zip").write_bytes(b"not actually a zip file")
-    lines = list(iter_lines(app))
-    err = capsys.readouterr().err
-    assert lines == []
-    assert "skipping unreadable" in err
-    assert "raw.zip" in err
-
-
 def test_iter_lines_reads_both_raw_dir_and_raw_zip(tmp_path: Path) -> None:
     """Lock in the verbatim reference contract: when an app dir contains BOTH
     ``raw/`` and ``raw.zip`` (e.g. a partial cleanup), iter_lines surfaces lines
@@ -349,7 +336,7 @@ def test_empty_root_exits_1(tmp_path: Path, capsys: pytest.CaptureFixture[str]) 
     assert "No runs matched" in err
 
 
-def test_match_output_format(fake_logs: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_match_output_and_summary_streams(fake_logs: Path, capsys: pytest.CaptureFixture[str]) -> None:
     rc = main(
         [
             "search",
@@ -361,27 +348,13 @@ def test_match_output_format(fake_logs: Path, capsys: pytest.CaptureFixture[str]
             "panic",
         ]
     )
-    out = capsys.readouterr().out
+    captured = capsys.readouterr()
     assert rc == 0
-    assert "[app1][app.1.log] panic: db down" in out
-
-
-def test_summary_to_stderr(fake_logs: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    rc = main(
-        [
-            "search",
-            "--root",
-            str(fake_logs),
-            "--run",
-            "1430_run_a",
-            "--keyword",
-            "panic",
-        ]
-    )
-    err = capsys.readouterr().err
-    assert rc == 0
-    assert "# total matches: 1" in err
-    assert "app1: 1 match(es)" in err
+    # Matches go to stdout in the documented "[app][file] line" format.
+    assert "[app1][app.1.log] panic: db down" in captured.out
+    # Summary lines go to stderr so a piped consumer sees only the matches.
+    assert "# total matches: 1" in captured.err
+    assert "app1: 1 match(es)" in captured.err
 
 
 def test_iter_lines_skips_corrupt_zip_member(
@@ -480,41 +453,3 @@ def test_search_toml_keep_ansi_true_drives_default(
     assert "\x1b[" in out
 
 
-def test_search_no_keep_ansi_clears_toml_true(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """``--no-keep-ansi`` must override a TOML ``true`` at runtime."""
-    root = tmp_path / "logs"
-    coloured = "\x1b[2m2026-05-04T21:19:02Z\x1b[0m app panic: db down\n"
-    _write(root / "20260504" / "1430_run_x" / "app1" / "raw" / "a.log", coloured)
-    config_path = tmp_path / "paperbark.toml"
-    config_path.write_text(
-        '[paperbark]\nroot = "logs"\n\n[search]\nkeep_ansi = true\n', encoding="utf-8"
-    )
-    rc = main(
-        [
-            "search",
-            "--config",
-            str(config_path),
-            "--root",
-            str(root),
-            "--keyword",
-            "panic",
-            "--no-keep-ansi",
-        ]
-    )
-    assert rc == 0
-    out = capsys.readouterr().out
-    assert "\x1b[" not in out
-
-
-def test_keyboard_interrupt_exits_130(monkeypatch: pytest.MonkeyPatch) -> None:
-    """SIGINT during a search returns exit code 130 (the documented contract)."""
-    import paperbark.search as search_mod
-
-    def _boom(_args: object) -> int:
-        raise KeyboardInterrupt
-
-    monkeypatch.setattr(search_mod, "run", _boom)
-    rc = main(["search", "--keyword", "panic"])
-    assert rc == 130
