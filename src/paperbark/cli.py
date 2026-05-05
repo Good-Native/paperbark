@@ -25,7 +25,7 @@ if TYPE_CHECKING:  # pragma: no cover — types only.
         ProbesConfig,
         SearchConfig,
     )
-    from paperbark.dispatcher import MonitorState, SnapshotRunner
+    from paperbark.dispatcher import MonitorStart, MonitorState, SnapshotRunner
 
 _NOT_IMPLEMENTED_EXIT = 2
 
@@ -332,6 +332,7 @@ def _run_monitor(args: argparse.Namespace) -> int:
 
     from paperbark.analyse import run as run_analyse
     from paperbark.animator import MonitorAnimator
+    from paperbark.banner import print_banner
     from paperbark.dispatcher import DispatcherError, run_monitor_loop
 
     config = _load_config(args)
@@ -362,18 +363,30 @@ def _run_monitor(args: argparse.Namespace) -> int:
     try:
         if use_animator:
             with MonitorAnimator() as ticker:
+                # ``transient=False`` on the Live region means console.print
+                # calls during the run render above the ticker — so the banner
+                # appears once at the top, the spinner sits below it.
+                def _on_start(start: MonitorStart) -> None:
+                    print_banner(start, console=ticker.console, show_quit_hint=True)
+
                 result = run_monitor_loop(
                     config,
                     monitor=monitor_cfg,
                     stop_event=stop_event,
+                    on_start=_on_start,
                     on_state=ticker.update,
                     snapshot_runner=snapshot_runner,
                 )
         else:
+
+            def _on_start_plain(start: MonitorStart) -> None:
+                print_banner(start, console=None, show_quit_hint=False)
+
             result = run_monitor_loop(
                 config,
                 monitor=monitor_cfg,
                 stop_event=stop_event,
+                on_start=_on_start_plain,
                 on_state=_print_state_line,
                 snapshot_runner=snapshot_runner,
             )

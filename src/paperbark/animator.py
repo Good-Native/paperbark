@@ -109,6 +109,10 @@ class MonitorAnimator:
     ) -> None:
         self._console = console if console is not None else Console()
         self._fps = fps
+        # Exposed so the CLI can render the startup banner through the same
+        # Console; rich.live.Live renders ``console.print`` calls above the
+        # active live region while ``transient=False``.
+        self.console = self._console
         self._monotonic = monotonic
         self._state: MonitorState | None = None
         self._state_published_at: float | None = None

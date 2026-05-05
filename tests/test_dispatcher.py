@@ -15,6 +15,7 @@ from paperbark.config import Config, MonitorConfig, ProbesConfig, SourceConfig
 from paperbark.dispatcher import (
     DispatcherError,
     MonitorResult,
+    MonitorStart,
     MonitorState,
     build_source,
     build_sources,
@@ -834,23 +835,21 @@ def test_cleanup_rejects_invalid_mode(tmp_path: Path) -> None:
 # --- v0.1.1: parse-rate warning -------------------------------------------
 
 
-def test_loop_warns_on_silent_format_mismatch(
+def test_loop_logs_format_mismatch_to_monitor_log_not_stderr(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A source that captures lines but parses none should trip a warning.
+    """A source that captures lines but parses none records a hint in monitor.log.
 
-    Use an iteration count of 1 so the loop runs end-to-end with predictable
-    output. The line is plausibly a non-JSON shape (no embedded record)
-    so ``iteration._try_parse_json_record`` returns ``None`` for every line.
+    The bash reference never warned on stderr for low parse rates and
+    paperbark used to false-positive on mixed-format sources, so the line
+    now lives in ``monitor.log`` only — enough to investigate after the
+    fact, quiet enough not to nag the operator on every run.
     """
     fixed = datetime(2026, 5, 3, 14, 30, 45, tzinfo=UTC)
     plain_lines = [f"2026-05-03T02:00:0{i}Z plain text line without json\n" for i in range(6)]
     cfg = Config(root=tmp_path / "logs")
     monitor = MonitorConfig(interval=1, iterations=1, analyse_every=0, cleanup_enabled=False)
-    # ``_FakeMonotonic`` (used by the other loop tests in this file) advances
-    # on demand and never raises ``StopIteration`` if the loop's internal
-    # call count grows. Safer than a finite ``iter([...])``.
-    run_monitor_loop(
+    result = run_monitor_loop(
         cfg,
         monitor=monitor,
         built_sources=[("nonjson", _FakeSource(plain_lines))],
@@ -859,9 +858,46 @@ def test_loop_warns_on_silent_format_mismatch(
         clock=lambda: fixed,
     )
     err = capsys.readouterr().err
-    assert "source 'nonjson'" in err
-    assert "parsed 0/6 line(s)" in err
-    assert "(0%)" in err
+    assert "nonjson" not in err
+    monitor_log = (result.run_dir / "monitor.log").read_text(encoding="utf-8")
+    assert "Source 'nonjson'" in monitor_log
+    assert "0/6 lines parsed (0%)" in monitor_log
+
+
+# --- on_start callback -----------------------------------------------------
+
+
+def test_run_monitor_loop_fires_on_start_with_run_metadata(tmp_path: Path) -> None:
+    """``on_start`` fires once with the resolved run dir, source names, and config.
+
+    The CLI uses this to render the startup banner above the live ticker;
+    pinning the call shape here keeps the contract stable for that consumer
+    and any future ones (e.g. structured-log forwarding).
+    """
+    fixed = datetime(2026, 5, 3, 14, 30, 45, tzinfo=UTC)
+    cfg = Config(root=tmp_path / "logs")
+    monitor = MonitorConfig(interval=1, iterations=1, analyse_every=0, cleanup_enabled=False)
+
+    received: list[MonitorStart] = []
+
+    result = run_monitor_loop(
+        cfg,
+        monitor=monitor,
+        built_sources=[
+            ("api", _FakeSource(_scripted_lines())),
+            ("worker", _FakeSource(_scripted_lines())),
+        ],
+        stop_event=threading.Event(),
+        on_start=received.append,
+        monotonic=_FakeMonotonic(),
+        clock=lambda: fixed,
+    )
+
+    assert len(received) == 1
+    start = received[0]
+    assert start.run_dir == result.run_dir
+    assert start.source_names == ("api", "worker")
+    assert start.monitor is monitor
 
 
 # Helper used by the parse-rate test — repurposed from earlier _FakeSource

@@ -12,7 +12,9 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
   `<TS>_iter<N>` filename pattern, in-process `samples` line-cap
   (mirroring the bash dispatcher's `| tail -n N` pipe), automatic
   run-dir rotation (`zip` / `delete` modes), `[[sources]].format_keys`
-  for per-field JSON key overrides, the parse-rate warning, the
+  for per-field JSON key overrides, a parse-rate hint in `monitor.log`
+  (the stderr warning was dropped post-v0.1.1 — too noisy on healthy
+  mixed-format sources), the
   `External errors and timeouts` probe heading, and ANSI stripping in
   `paperbark search` (with `--keep-ansi` / `[search].keep_ansi`).
 - **Repo:** <https://github.com/Good-Native/paperbark>
