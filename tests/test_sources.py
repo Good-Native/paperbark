@@ -57,9 +57,10 @@ def test_flyctl_capture_keeps_last_samples_lines() -> None:
     ]
 
 
-def test_flyctl_rejects_zero_or_negative_samples() -> None:
+@pytest.mark.parametrize("bad_samples", [0, -1, -400])
+def test_flyctl_rejects_zero_or_negative_samples(bad_samples: int) -> None:
     with pytest.raises(ValueError, match="samples must be > 0"):
-        FlyctlSource(app="example", samples=0)
+        FlyctlSource(app="example", samples=bad_samples)
 
 
 def test_flyctl_capture_yields_lines_from_runner() -> None:

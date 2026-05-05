@@ -847,13 +847,15 @@ def test_loop_warns_on_silent_format_mismatch(
     plain_lines = [f"2026-05-03T02:00:0{i}Z plain text line without json\n" for i in range(6)]
     cfg = Config(root=tmp_path / "logs")
     monitor = MonitorConfig(interval=1, iterations=1, analyse_every=0, cleanup_enabled=False)
-    mono_seq = iter([0.0, 0.1, 0.2, 0.3])
+    # ``_FakeMonotonic`` (used by the other loop tests in this file) advances
+    # on demand and never raises ``StopIteration`` if the loop's internal
+    # call count grows. Safer than a finite ``iter([...])``.
     run_monitor_loop(
         cfg,
         monitor=monitor,
         built_sources=[("nonjson", _FakeSource(plain_lines))],
         stop_event=threading.Event(),
-        monotonic=lambda: next(mono_seq),
+        monotonic=_FakeMonotonic(),
         clock=lambda: fixed,
     )
     err = capsys.readouterr().err

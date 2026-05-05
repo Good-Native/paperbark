@@ -39,22 +39,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `paperbark search` now strips ANSI escape sequences from matched lines
   by default so piped/redirected output stays readable. New `--keep-ansi`
   flag preserves them for TTY-aware viewers.
-- Per-iteration capture again writes the flat `<TS>_iter<N>.csv`
-  side-output alongside `<TS>_iter<N>.json` (timestamp/level/component/
-  message/extras columns). The `iteration` module already supported the
-  sink path; v0.1.0 simply never passed it. Bash-parity restoration.
-- New tests: 20 covering the cleanup pass (`zip`/`delete` modes,
-  retention window, idempotency, missing-root no-op, invalid mode),
-  parse-rate warning, `samples` knob, `format_keys` validation, and
-  search ANSI handling.
+- Per-iteration capture again writes the flat
+  `<YYYYMMDDTHHMMSSZ>_iter<N>.csv` side-output alongside the matching
+  `.json` (timestamp/level/component/message/extras columns). The
+  `iteration` module already supported the sink path; v0.1.0 simply
+  never passed it. Bash-parity restoration.
+- 24 new tests covering the cleanup pass (`zip`/`delete` modes,
+  retention window, idempotency, missing-root no-op, invalid mode,
+  zip-content verification), parse-rate warning, `samples` knob,
+  `format_keys` validation, search ANSI handling (default + opt-out +
+  TOML drives + `--no-keep-ansi` clears TOML).
 
 ### Changed
 
 - Per-iteration filenames revert to the bash-dispatcher shape:
-  `<HHMMSSZ>_iter<N>.{log,json,csv}` (timestamp first, no zero-padded
-  iter index). v0.1.0 used `iter_<NNNN>_<HHMMSSZ>.{log,json}`, which
-  silently broke downstream tools that relied on the documented run-dir
-  contract. The `<HHMMSS>Z` snapshot suffix in `snapshots/` is unchanged.
+  `<YYYYMMDDTHHMMSSZ>_iter<N>.{log,json,csv}` (timestamp first, no
+  zero-padded iter index). v0.1.0 used `iter_<NNNN>_<YYYYMMDDTHHMMSSZ>`,
+  which silently broke downstream tools that relied on the documented
+  run-dir contract. The `<HHMMSS>Z` snapshot suffix in `snapshots/` is
+  unchanged.
 - The `External errors and timeouts` probe heading replaces
   `Database / external`. The toggle key stays `database` (config
   back-compat) but the heading matches what the default pattern set
