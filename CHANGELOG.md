@@ -7,6 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `[[sources]]` (flyctl) accepts a `samples` integer (default `400`) that
+  caps the number of lines kept from each `flyctl logs --no-tail` window.
+  `flyctl logs` itself has no native flag for this (`-n` is the short
+  form of `--no-tail`), so the bound is enforced inside `capture()` via
+  a bounded `deque` — same behaviour as the bash dispatcher's
+  `flyctl logs … | tail -n <samples>` pipe. v0.1.0 quietly used flyctl's
+  built-in window (~100 lines), which dropped messages between
+  iterations on busy apps.
+- `[[sources]]` (flyctl) accepts a `format_keys` table for per-field JSON
+  key overrides (`timestamp`, `level`, `message`, `component`). Each value
+  may be a string or a list of strings. The iteration parser threads the
+  override through `summarise_log_file` / `summarise_lines` so apps that
+  emit structured logs under non-default keys parse correctly without
+  forking. Non-JSON formats (regex presets) remain on the v0.2 list.
+- `[monitor]` gains `cleanup_enabled`, `cleanup_days`, and `cleanup_mode`
+  (`"zip"` / `"delete"`); the loop now rotates older run dirs at start,
+  matching the bash dispatcher. CLI flags: `--cleanup` / `--no-cleanup`,
+  `--cleanup-days N`, `--cleanup-mode {zip,delete}`. `"zip"` archives each
+  `<app>/raw/` to a sibling `raw.zip` and removes the per-iter
+  `*_iter*.{json,csv}` artefacts; summaries and time-series CSVs are
+  preserved. `paperbark.search` already reads `raw.zip` transparently.
+- `paperbark monitor` now emits a one-time stderr warning (and a per-iter
+  line in `monitor.log`) when a source's parse rate drops below 50% —
+  the format-mismatch case where probes downstream see a heavily
+  depleted record set with no other diagnostic. Threshold: at least
+  five captured lines and ≤50% parsed; smoke-tested live against the
+  hover-analysis Fly app (19/100 parsed → warning).
+- `paperbark search` now strips ANSI escape sequences from matched lines
+  by default so piped/redirected output stays readable. New `--keep-ansi`
+  flag preserves them for TTY-aware viewers.
+- Per-iteration capture again writes the flat
+  `<YYYYMMDDTHHMMSSZ>_iter<N>.csv` side-output alongside the matching
+  `.json` (timestamp/level/component/message/extras columns). The
+  `iteration` module already supported the sink path; v0.1.0 simply
+  never passed it. Bash-parity restoration.
+- 24 new tests covering the cleanup pass (`zip`/`delete` modes,
+  retention window, idempotency, missing-root no-op, invalid mode,
+  zip-content verification), parse-rate warning, `samples` knob,
+  `format_keys` validation, search ANSI handling (default + opt-out +
+  TOML drives + `--no-keep-ansi` clears TOML).
+
+### Changed
+
+- Per-iteration filenames revert to the bash-dispatcher shape:
+  `<YYYYMMDDTHHMMSSZ>_iter<N>.{log,json,csv}` (timestamp first, no
+  zero-padded iter index). v0.1.0 used `iter_<NNNN>_<YYYYMMDDTHHMMSSZ>`,
+  which silently broke downstream tools that relied on the documented
+  run-dir contract. The `<HHMMSS>Z` snapshot suffix in `snapshots/` is
+  unchanged.
+- The `External errors and timeouts` probe heading replaces
+  `Database / external`. The toggle key stays `database` (config
+  back-compat) but the heading matches what the default pattern set
+  actually catches: generic Go context timeouts and outbound HTTP
+  failures, not just DB driver errors. Pattern set is unchanged; users
+  who want a DB-only matcher can override under
+  `[probes.patterns].database`.
+- `FlyctlSource.capture()` now buffers flyctl's output through a
+  `deque(maxlen=samples)` and yields the last N lines, matching
+  `reference/logs.sh`'s `flyctl logs … | tail -n $SAMPLES` pipe.
+  `samples` defaults to `400`.
+
+### Fixed
+
+- `paperbark monitor` would silently swallow format mismatches: a source
+  whose every line failed JSON parsing showed up as healthy (`summary.md`
+  rendered with `Parse success rate: 0.0%` but every probe section read
+  `(no matches)` with no other signal). The dispatcher now surfaces a
+  warning once per affected app per run.
+
 ## [0.1.0] - 2026-05-04
 
 ### Added

@@ -5,14 +5,27 @@ Each call to :meth:`capture` runs a fresh subprocess and yields its
 stdout line by line; the cursor filter (``paperbark.cursor``) is
 responsible for dedup across overlapping iterations because Fly's
 ``--no-tail`` returns the same recent window every time.
+
+``flyctl logs`` itself has no native flag to cap the number of returned
+lines (``-n`` is the short form of ``--no-tail``), so the bash
+dispatcher pipes through ``tail -n <samples>``. We mirror that in
+``capture()`` by buffering through a bounded deque before yielding,
+which keeps the same upper bound on memory and the same "last N lines"
+semantics without spawning a second subprocess.
 """
 
 from __future__ import annotations
 
 import subprocess
+from collections import deque
 from collections.abc import Callable, Iterator
 
 _FLYCTL_TIMEOUT = 5.0  # seconds; how long to wait after terminate() before SIGKILL.
+DEFAULT_SAMPLES = 400
+"""Per-iteration capture window size, mirrors ``reference/logs.sh``'s
+``--samples`` default. Without this knob ``flyctl logs --no-tail`` falls
+back to its built-in window (~100 lines), which can drop messages
+between iterations on busy apps."""
 
 
 def _default_runner(command: list[str]) -> Iterator[str]:
@@ -56,12 +69,25 @@ class FlyctlSource:
         app: str,
         *,
         no_tail: bool = True,
+        samples: int = DEFAULT_SAMPLES,
+        format_keys: dict[str, tuple[str, ...]] | None = None,
         runner: Callable[[list[str]], Iterator[str]] | None = None,
     ) -> None:
         if not app:
             raise ValueError("FlyctlSource requires a non-empty app name")
+        if samples <= 0:
+            raise ValueError(f"FlyctlSource samples must be > 0, got {samples}")
         self.app = app
         self.no_tail = no_tail
+        self.samples = samples
+        self.format_keys = format_keys
+        """JSON key overrides for the iteration parser.
+
+        ``None`` keeps the iteration module's defaults, which match Fly's
+        own log shape. Operators whose lines don't fit the default keys
+        can supply ``[[sources]].format_keys`` in TOML to override per
+        canonical field — see :file:`docs/SOURCES.md`.
+        """
         self._runner = runner or _default_runner
 
     @property
@@ -76,4 +102,10 @@ class FlyctlSource:
         # bounding. We drop the parameter rather than fail noisily — the
         # contract still holds because cursor filtering is mandatory anyway.
         del since
-        return self._runner(self.command)
+        raw = self._runner(self.command)
+        # Mirror the bash dispatcher's ``| tail -n <samples>``: keep only the
+        # last ``self.samples`` lines from flyctl's buffered output. This
+        # bounds memory at O(samples) and matches the ordering the bash
+        # version produces (chronological, most-recent-suffix kept).
+        buffered: deque[str] = deque(raw, maxlen=self.samples)
+        yield from buffered

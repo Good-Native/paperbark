@@ -67,7 +67,7 @@ def test_default_probes_returns_full_set_with_no_config() -> None:
         "Heartbeat",
         "Process health",
         "Autoscaler",
-        "Database / external",
+        "External errors and timeouts",
         "Sentry",
     ]
 
@@ -80,7 +80,7 @@ def test_default_probes_drops_disabled_probes() -> None:
     assert "Sentry" not in names
     # Untouched defaults remain.
     assert "HTTP status" in names
-    assert "Database / external" in names
+    assert "External errors and timeouts" in names
 
 
 def test_default_probes_folds_config_keywords_into_adhoc_bucket() -> None:
@@ -108,7 +108,9 @@ def test_pattern_override_replaces_builtin_regex_set() -> None:
     )
     # Override replaces, does not extend: built-ins like ``connection refused``
     # disappear when ``[probes.patterns].database`` is supplied.
-    assert _bucket_labels(default_probes(config=cfg), "Database / external") == ["pg-deadlock"]
+    assert _bucket_labels(default_probes(config=cfg), "External errors and timeouts") == [
+        "pg-deadlock"
+    ]
 
 
 def test_pattern_override_unaffected_probe_keeps_builtin_set() -> None:
@@ -117,7 +119,9 @@ def test_pattern_override_unaffected_probe_keeps_builtin_set() -> None:
             "autoscaler": (PatternOverride(label="k8s-evict", pattern="Evicting pod"),),
         }
     )
-    assert "connection refused" in _bucket_labels(default_probes(config=cfg), "Database / external")
+    assert "connection refused" in _bucket_labels(
+        default_probes(config=cfg), "External errors and timeouts"
+    )
 
 
 def test_disabled_probe_with_override_is_still_dropped() -> None:
@@ -178,7 +182,9 @@ def test_analyse_pattern_override_drives_findings(tmp_path: Path) -> None:
 
     assert rc == 0
     payload = json.loads((run_dir / "analysis.json").read_text(encoding="utf-8"))
-    db = next(p for p in payload["apps"][0]["probes"] if p["name"] == "Database / external")
+    db = next(
+        p for p in payload["apps"][0]["probes"] if p["name"] == "External errors and timeouts"
+    )
     labels = [f["label"] for f in db["findings"]]
     # ``pg-deadlock`` matches the seeded line; the built-in labels would
     # have produced no matches against this fixture.

@@ -93,6 +93,9 @@ PROBE_NAMES: tuple[str, ...] = (
 DEFAULT_INTERVAL = 3
 DEFAULT_ITERATIONS = 1440
 DEFAULT_ANALYSE_EVERY = 300
+DEFAULT_CLEANUP_DAYS = 1
+DEFAULT_CLEANUP_MODE = "zip"
+CLEANUP_MODES: tuple[str, ...] = ("zip", "delete")
 
 # `run_id` is interpolated into a filesystem path; the same character class as
 # the bash dispatcher so a hostile or careless value can't escape the
@@ -194,7 +197,8 @@ class SearchConfig:
     that both write to the ``case_sensitive`` dest, so either flag can clear
     or set the TOML default at runtime. ``max = 0`` is the documented
     sentinel for "unlimited matches" and matches the bash dispatcher's
-    behaviour.
+    behaviour. ``keep_ansi`` defaults to ``false`` so piped/redirected
+    output stays readable; ``--keep-ansi`` on the CLI overrides at runtime.
     """
 
     run: str = "latest"
@@ -203,6 +207,7 @@ class SearchConfig:
     regexes: tuple[str, ...] = ()
     case_sensitive: bool = False
     max: int = 0
+    keep_ansi: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,12 +218,18 @@ class MonitorConfig:
     dispatcher and animator never re-parse user input. ``iterations = 0`` runs
     forever; ``analyse_every = 0`` disables snapshot analysis; ``run_id = ""``
     triggers an auto-generated ``<adjective>-<colour>`` slug at run time.
+    ``cleanup_enabled`` runs the rotation pass at loop start; ``cleanup_mode``
+    is either ``"zip"`` (archive ``raw/`` and delete iter JSON/CSV files,
+    preserving summaries) or ``"delete"`` (remove the run dir entirely).
     """
 
     interval: int = DEFAULT_INTERVAL
     iterations: int = DEFAULT_ITERATIONS
     analyse_every: int = DEFAULT_ANALYSE_EVERY
     run_id: str = ""
+    cleanup_enabled: bool = True
+    cleanup_days: int = DEFAULT_CLEANUP_DAYS
+    cleanup_mode: str = DEFAULT_CLEANUP_MODE
 
 
 @dataclass(frozen=True, slots=True)
@@ -396,11 +407,32 @@ def _parse_monitor(raw: Any) -> MonitorConfig:
         raise ConfigError(f"[monitor].run_id must be a string, got {type(run_id_raw).__name__}")
     if not is_valid_run_id(run_id_raw):
         raise ConfigError(f"[monitor].{RUN_ID_HELP}")
+    cleanup_enabled = _parse_bool_field(
+        table.get("cleanup_enabled", True), "[monitor].cleanup_enabled"
+    )
+    cleanup_days_raw = table.get("cleanup_days", DEFAULT_CLEANUP_DAYS)
+    if isinstance(cleanup_days_raw, bool) or not isinstance(cleanup_days_raw, int):
+        raise ConfigError(
+            f"[monitor].cleanup_days must be an integer, got {type(cleanup_days_raw).__name__}"
+        )
+    if cleanup_days_raw < 0:
+        raise ConfigError("[monitor].cleanup_days must be >= 0")
+    cleanup_mode_raw = table.get("cleanup_mode", DEFAULT_CLEANUP_MODE)
+    if not isinstance(cleanup_mode_raw, str):
+        raise ConfigError(
+            f"[monitor].cleanup_mode must be a string, got {type(cleanup_mode_raw).__name__}"
+        )
+    if cleanup_mode_raw not in CLEANUP_MODES:
+        joined = ", ".join(repr(m) for m in CLEANUP_MODES)
+        raise ConfigError(f"[monitor].cleanup_mode must be one of {joined}")
     return MonitorConfig(
         interval=interval,
         iterations=iterations_raw,
         analyse_every=analyse_every,
         run_id=run_id_raw,
+        cleanup_enabled=cleanup_enabled,
+        cleanup_days=cleanup_days_raw,
+        cleanup_mode=cleanup_mode_raw,
     )
 
 
@@ -434,6 +466,7 @@ def _parse_search(raw: Any) -> SearchConfig:
             table.get("case_sensitive", False), "[search].case_sensitive"
         ),
         max=max_raw,
+        keep_ansi=_parse_bool_field(table.get("keep_ansi", False), "[search].keep_ansi"),
     )
 
 

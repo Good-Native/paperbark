@@ -65,18 +65,30 @@ silently widen the contract. Decimals, signs, and unknown suffixes raise
 Cadence, scope, and identity for `paperbark monitor`. Defaults mirror
 `reference/logs.sh` so the Python port behaves identically out of the box.
 
-| Key             | Type     | Default | Description                                                                      |
-| --------------- | -------- | ------- | -------------------------------------------------------------------------------- |
-| `interval`      | duration | `3`     | Seconds (or duration string) between iterations. Must be `> 0`.                  |
-| `iterations`    | integer  | `1440`  | Total iterations to run. `0` runs forever (until SIGINT).                        |
-| `analyse_every` | duration | `"5m"`  | Snapshot analyse cadence. `0` disables snapshots entirely.                       |
-| `run_id`        | string   | `""`    | Run slug. Empty triggers an auto-generated `<adjective>-<colour>` slug at start. |
+| Key               | Type     | Default | Description                                                                                                                       |
+| ----------------- | -------- | ------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `interval`        | duration | `3`     | Seconds (or duration string) between iterations. Must be `> 0`.                                                                   |
+| `iterations`      | integer  | `1440`  | Total iterations to run. `0` runs forever (until SIGINT).                                                                         |
+| `analyse_every`   | duration | `"5m"`  | Snapshot analyse cadence. `0` disables snapshots entirely.                                                                        |
+| `run_id`          | string   | `""`    | Run slug. Empty triggers an auto-generated `<adjective>-<colour>` slug at start.                                                  |
+| `cleanup_enabled` | boolean  | `true`  | Run the rotation pass at loop start. Set `false` (or `--no-cleanup`) to disable.                                                  |
+| `cleanup_days`    | integer  | `1`     | Rotate run dirs older than `N` days. `0` rotates every older run, including yesterday's.                                          |
+| `cleanup_mode`    | string   | `"zip"` | `"zip"` archives each `<app>/raw/` to a sibling `raw.zip` and removes per-iter JSON/CSV; `"delete"` removes the run dir entirely. |
 
 `run_id` validation: letters, numbers, `.`, `_`, `-`; must start with a
 letter or number. The same regex (`^[A-Za-z0-9][A-Za-z0-9._-]*$`) applies
 on the CLI override path so a hostile `--run-id ../escape` is rejected.
 
-CLI flags: `--interval`, `--iterations`, `--analyse-every`, `--run-id`.
+The cleanup pass runs once at loop start before the new run dir is
+created. `summary.md`, `time_series.csv`, `events_per_minute.csv`,
+`components_per_minute.csv`, `analysis.{json,md}`, and `monitor.log`
+all survive a `"zip"` rotation; only the bulky raw and per-iter
+artefacts are folded into `raw.zip` / removed. `paperbark.search`
+already reads `<app>/raw.zip` transparently, so rotated runs remain
+searchable.
+
+CLI flags: `--interval`, `--iterations`, `--analyse-every`, `--run-id`,
+`--cleanup` / `--no-cleanup`, `--cleanup-days`, `--cleanup-mode`.
 
 ### `[analyse]`
 
@@ -109,9 +121,11 @@ Defaults for `paperbark search`. Every field is also a CLI flag.
 | `regexes`        | array of strings | `[]`       | Repeatable regex terms.                                                                          |
 | `case_sensitive` | boolean          | `false`    | Strict matching (default off; case-insensitive).                                                 |
 | `max`            | integer          | `0`        | Stop after N total matches. `0` is unlimited. Must be `>= 0`.                                    |
+| `keep_ansi`      | boolean          | `false`    | Preserve ANSI escape sequences in matched lines (default strips them so pipes stay readable).    |
 
 CLI flags: `--run`, `--root`, `--app`, repeatable `--keyword` / `--regex`,
-`--case-sensitive` / `--ignore-case` (mutually exclusive), `--max`.
+`--case-sensitive` / `--ignore-case` (mutually exclusive), `--max`,
+`--keep-ansi` / `--no-keep-ansi`.
 
 A TOML-supplied `[search].keywords` or `[search].regexes` drives matching
 even when no `--keyword` / `--regex` flag is supplied. As with analyse,
@@ -173,10 +187,36 @@ type-specific option and forwarded to the source constructor.
 
 #### `flyctl` options
 
-| Key       | Type    | Default | Description                                                                                                                           |
-| --------- | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `app`     | string  | —       | Required Fly.io app name.                                                                                                             |
-| `no_tail` | boolean | `true`  | Run `flyctl logs --no-tail` (one-shot capture; cursor filter handles overlap). The streaming form is intentionally unsupported in v1. |
+| Key           | Type    | Default | Description                                                                                                                                           |
+| ------------- | ------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app`         | string  | —       | Required Fly.io app name.                                                                                                                             |
+| `no_tail`     | boolean | `true`  | Run `flyctl logs --no-tail` (one-shot capture; cursor filter handles overlap). The streaming form is intentionally unsupported in v1.                 |
+| `samples`     | integer | `400`   | Per-iteration capture window size (`-n` on flyctl). Mirrors `reference/logs.sh`'s `--samples` default; lift on busy apps to avoid dropped lines.      |
+| `format_keys` | table   | none    | JSON key overrides for the iteration parser. Each value is a string or list of strings; allowed fields: `timestamp`, `level`, `message`, `component`. |
+
+##### `format_keys` example
+
+For an app whose structured logs use `ts`/`severity`/`text`/`service`
+instead of the Fly defaults:
+
+```toml
+[[sources]]
+name = "api"
+type = "flyctl"
+app = "fly-api"
+
+[sources.format_keys]
+timestamp = "ts"
+level = ["severity", "lvl"]
+message = "text"
+component = "service"
+```
+
+Unspecified fields keep their defaults (`time`/`timestamp`/…, `level`,
+`msg`/`message`, `component`). Unknown field names are rejected so a
+typo can't silently disable detection. Only JSON-keyed lines benefit
+from `format_keys` — non-JSON shapes (plain text, regex-matched
+formats) are tracked for v0.2.
 
 #### `wrangler`, `kubectl`, `cloudwatch`, `file`, `stdin`
 
@@ -210,14 +250,28 @@ a major version.
 
 ```text
 <root>/YYYYMMDD/HHMM_<slug>_<settings>/
-├── <app>/raw/*.log         # cursor-filtered captures
-├── <app>/.cursor           # last-seen ISO timestamp
+├── <app>/raw/<YYYYMMDDTHHMMSSZ>_iter<N>.log   # cursor-filtered captures
+├── <app>/<YYYYMMDDTHHMMSSZ>_iter<N>.json      # per-iter aggregator input
+├── <app>/<YYYYMMDDTHHMMSSZ>_iter<N>.csv       # flat per-line side-output
+├── <app>/.cursor                              # last-seen ISO timestamp
+├── <app>/summary.md                           # cumulative aggregator summary
+├── <app>/{time_series,events_per_minute,components_per_minute}.csv
 ├── snapshots/
 │   ├── analysis_<HHMMSS>Z.md
 │   └── analysis_<HHMMSS>Z.json
 ├── analysis.md / analysis.json
 └── monitor.log
 ```
+
+The per-iter `<YYYYMMDDTHHMMSSZ>` token is the iteration's wall-clock
+UTC timestamp at capture start — e.g. `20260504T224503Z_iter1.log`.
+The snapshot suffix in `snapshots/` only carries the `<HHMMSS>Z` half
+because snapshots always live under a dated run dir.
+
+After a `cleanup_mode = "zip"` rotation, each older run dir keeps its
+`<app>/summary.md` and `<app>/{time_series,events_per_minute,components_per_minute}.csv`,
+while the per-iter logs and JSON/CSV files collapse to `<app>/raw.zip`
+(transparently read by `paperbark search`).
 
 ## Examples
 

@@ -6,14 +6,22 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 ## Current state
 
 - **Last verified:** 2026-05-05
-- **Latest commit on `main`:** `Cut 0.1.0 release (#14)` (`da04220`).
-  PR #13 landed `docs/PROBES.md`, wired `[probes]` toggles and
-  `[probes.patterns]` overrides through to the runtime, and retired
-  `reference/`; PR #14 cut the v0.1.0 version bump.
+- **Latest commit on `main`:** `Refresh roadmap after v0.1.0` (`75cd478`).
+  v0.1.0 cut as a version bump on `main`; v0.1.1 is in flight on
+  `bash-parity-restoration`. It restores the per-iter `<TS>_iter<N>.csv`
+  side-output, the `<TS>_iter<N>` filename pattern, in-process
+  `samples` line-cap (mirroring the bash dispatcher's `| tail -n N`
+  pipe), and automatic run-dir rotation (`zip` / `delete` modes), plus
+  the review fixes: `[[sources]].format_keys` for per-field JSON key
+  overrides, a parse-rate warning when sources fall below 50% parsed,
+  the `External errors and timeouts` probe heading replacing the
+  misleading `Database / external`, and ANSI stripping in
+  `paperbark search` (with `--keep-ansi` / `[search].keep_ansi` for
+  TTY-aware viewers).
 - **Repo:** <https://github.com/Good-Native/paperbark>
 - **Released:** v0.1.0 on 2026-05-04 (version bump only; PyPI and
   Homebrew artefacts still pending).
-- **Tests:** 380 passing across 27 test modules; CI has been green on
+- **Tests:** 407 passing across 27 test modules; CI has been green on
   every push since the `Land uv.lock and unblock CI` change.
 
 ### Implementation status
@@ -203,6 +211,21 @@ Carry these into the Python port:
 - Alerting integrations (Slack, PagerDuty).
 - External `Source` plugin loader (interface documented; loader not
   shipped).
+
+## v0.2 shortlist
+
+- **Wire regex-format presets into iteration.** The format layer already
+  ships `JsonKeysFormat` (default, used today), `RegexFormat`, and three
+  presets (`apache-combined`, `nginx-default`, `syslog-rfc5424`), but
+  only the JSON path is reachable from `[[sources]]`. v0.2 adds a
+  `format = "<preset>"` (or inline `RegexFormat` definition) on each
+  `[[sources]]` entry so non-JSON payloads (pipe-delimited, syslog,
+  Apache, nginx, custom shapes via named-group regex) parse correctly.
+  Until then, non-JSON sources trip the format-mismatch warning.
+- Real implementations for the five stub sources (`wrangler`,
+  `kubectl`, `cloudwatch`, `file`, `stdin`).
+- Per-source probe overrides (today probe toggles and
+  `[probes.patterns]` are global).
 
 ## Beyond v1 (parking lot)
 

@@ -80,7 +80,14 @@ _SENTRY_PATTERNS: list[tuple[str, str]] = [
 _REGEX_PROBES: tuple[tuple[str, str, list[tuple[str, str]]], ...] = (
     ("process_health", "Process health", _PROCESS_HEALTH_PATTERNS),
     ("autoscaler", "Autoscaler", _AUTOSCALER_PATTERNS),
-    ("database", "Database / external", _DATABASE_PATTERNS),
+    # Heading is "External errors and timeouts" rather than "Database" because
+    # the regex set matches generic Go context timeouts (``context deadline
+    # exceeded``, ``i/o timeout``) that fire on outbound HTTP probes too —
+    # the original bash heading "Database / external" gave operators a false
+    # signal that timeouts came from a DB driver. The toggle key stays
+    # ``database`` for config compatibility; users who want a DB-only set can
+    # override via ``[probes.patterns].database``.
+    ("database", "External errors and timeouts", _DATABASE_PATTERNS),
     ("sentry", "Sentry", _SENTRY_PATTERNS),
 )
 

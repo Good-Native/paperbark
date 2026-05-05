@@ -249,8 +249,11 @@ def test_capture_iteration_writes_raw_log_and_summary(tmp_path: Path) -> None:
     assert raw_log.exists()
     assert summary_json.exists()
     assert raw_log.parent.name == "raw"
-    assert raw_log.name == "iter_0001_20260503T143045Z.log"
-    assert summary_json.name == "iter_0001_20260503T143045Z.json"
+    assert raw_log.name == "20260503T143045Z_iter1.log"
+    assert summary_json.name == "20260503T143045Z_iter1.json"
+    # The flat per-line CSV side-output lands next to the JSON; this is the
+    # bash-parity restoration in v0.1.1.
+    assert (raw_log.parent.parent / "20260503T143045Z_iter1.csv").exists()
     summary = json.loads(summary_json.read_text(encoding="utf-8"))
     assert summary["meta"]["parsed"] == 2
 
@@ -302,8 +305,9 @@ def test_run_iteration_creates_per_app_dirs_and_aggregates(tmp_path: Path) -> No
     run_iteration(sources, run_dir, iteration=1, now=fixed)
     for app in ("api", "worker"):
         app_dir = run_dir / app
-        assert (app_dir / "raw" / "iter_0001_20260503T143045Z.log").exists()
-        assert (app_dir / "iter_0001_20260503T143045Z.json").exists()
+        assert (app_dir / "raw" / "20260503T143045Z_iter1.log").exists()
+        assert (app_dir / "20260503T143045Z_iter1.json").exists()
+        assert (app_dir / "20260503T143045Z_iter1.csv").exists()
         # aggregate() output:
         assert (app_dir / "time_series.csv").exists()
         assert (app_dir / "summary.md").exists()
@@ -625,3 +629,240 @@ def test_run_monitor_loop_logs_overrun_warning(tmp_path: Path) -> None:
     )
     log_text = (result.run_dir / "monitor.log").read_text(encoding="utf-8")
     assert "running back-to-back" in log_text
+
+
+# --- v0.1.1: samples knob + format_keys override --------------------------
+
+
+def test_build_source_flyctl_threads_samples_through() -> None:
+    """``samples`` is enforced inside ``capture()`` via a bounded deque (the
+    bash dispatcher's ``| tail -n <samples>`` analogue), not via a flyctl
+    flag. The attribute round-trips so a probe of ``source.samples`` confirms
+    the TOML value reached the source instance.
+    """
+    spec = SourceConfig(
+        name="main",
+        type="flyctl",
+        options={"app": "fly-a", "samples": 750},
+    )
+    source = build_source(spec)
+    assert isinstance(source, FlyctlSource)
+    assert source.samples == 750
+    # Sanity-check the slicing: a runner that yields more than ``samples``
+    # lines should be trimmed at capture time.
+    source._runner = lambda _cmd: iter(f"line {i}\n" for i in range(800))
+    assert len(list(source.capture())) == 750
+
+
+def test_build_source_flyctl_rejects_non_int_samples() -> None:
+    spec = SourceConfig(
+        name="main",
+        type="flyctl",
+        options={"app": "fly-a", "samples": "lots"},
+    )
+    with pytest.raises(DispatcherError, match="'samples' must be an integer"):
+        build_source(spec)
+
+
+def test_build_source_flyctl_rejects_zero_samples() -> None:
+    spec = SourceConfig(
+        name="main",
+        type="flyctl",
+        options={"app": "fly-a", "samples": 0},
+    )
+    with pytest.raises(DispatcherError, match="'samples' must be > 0"):
+        build_source(spec)
+
+
+def test_build_source_flyctl_rejects_bool_samples() -> None:
+    spec = SourceConfig(
+        name="main",
+        type="flyctl",
+        options={"app": "fly-a", "samples": True},
+    )
+    with pytest.raises(DispatcherError, match="'samples' must be an integer"):
+        build_source(spec)
+
+
+def test_build_source_flyctl_accepts_format_keys_table() -> None:
+    spec = SourceConfig(
+        name="main",
+        type="flyctl",
+        options={
+            "app": "fly-a",
+            "format_keys": {"timestamp": "ts", "level": ["severity", "lvl"]},
+        },
+    )
+    source = build_source(spec)
+    assert isinstance(source, FlyctlSource)
+    assert source.format_keys == {"timestamp": ("ts",), "level": ("severity", "lvl")}
+
+
+def test_build_source_flyctl_rejects_unknown_format_keys_field() -> None:
+    spec = SourceConfig(
+        name="main",
+        type="flyctl",
+        options={"app": "fly-a", "format_keys": {"timestamp": "ts", "tier": "x"}},
+    )
+    with pytest.raises(DispatcherError, match="unknown format_keys field"):
+        build_source(spec)
+
+
+def test_build_source_flyctl_rejects_non_string_format_keys_value() -> None:
+    spec = SourceConfig(
+        name="main",
+        type="flyctl",
+        options={"app": "fly-a", "format_keys": {"timestamp": 123}},
+    )
+    with pytest.raises(DispatcherError, match="must be a string or a list of strings"):
+        build_source(spec)
+
+
+def test_capture_iteration_uses_source_format_keys(tmp_path: Path) -> None:
+    """The dispatcher reads ``source.format_keys`` and threads it through.
+
+    A line whose timestamp/level/message live under non-default keys would
+    otherwise show up as ``unknown`` everywhere; with overrides set the
+    parsed counts should match a Fly-style line.
+    """
+    fixed = datetime(2026, 5, 3, 14, 30, 45, tzinfo=UTC)
+    nondefault_lines = [
+        '2026-05-03T02:00:01Z {"ts":"2026-05-03T02:00:01Z","lvl":"INFO",'
+        '"text":"hello","service":"api"}\n',
+    ]
+    source = FlyctlSource(
+        app="example",
+        runner=lambda _cmd: iter(nondefault_lines),
+        format_keys={
+            "timestamp": ("ts",),
+            "level": ("lvl",),
+            "message": ("text",),
+            "component": ("service",),
+        },
+    )
+    raw_log, summary_json = capture_iteration(source, tmp_path / "app", 1, now=fixed)
+    summary = json.loads(summary_json.read_text(encoding="utf-8"))
+    assert summary["meta"]["parsed"] == 1
+    # Component bucket should pick up the overridden ``service`` key. Scan
+    # every per-minute bucket rather than just the first so the assertion
+    # doesn't drift if dict iteration order changes.
+    component_counts = summary["component_counts"]
+    assert any("api" in bucket for bucket in component_counts.values())
+    raw_log.unlink()
+
+
+# --- v0.1.1: cleanup / rotation -------------------------------------------
+
+
+def _seed_old_run(root: Path, date: str, run_name: str) -> Path:
+    run_dir = root / date / run_name
+    (run_dir / "app1" / "raw").mkdir(parents=True)
+    (run_dir / "app1" / "raw" / "20260101T000000Z_iter1.log").write_text("line\n")
+    (run_dir / "app1" / "20260101T000000Z_iter1.json").write_text("{}")
+    (run_dir / "app1" / "20260101T000000Z_iter1.csv").write_text("h\n")
+    (run_dir / "app1" / "summary.md").write_text("# kept\n")
+    return run_dir
+
+
+def test_cleanup_zip_archives_raw_and_strips_iter_files(tmp_path: Path) -> None:
+    import zipfile
+
+    from paperbark.dispatcher import cleanup_old_runs
+
+    today = datetime(2026, 5, 5, tzinfo=UTC)
+    old = _seed_old_run(tmp_path / "logs", "20260101", "0900_old")
+    cleanup_old_runs(tmp_path / "logs", days=1, mode="zip", today=today)
+    # raw/ tree replaced by raw.zip
+    assert not (old / "app1" / "raw").exists()
+    assert (old / "app1" / "raw.zip").exists()
+    # The archive must contain the seeded raw log; this catches regressions
+    # where ``shutil.make_archive`` is called with the wrong base/root_dir
+    # combination and produces an empty or wrong-tree zip.
+    with zipfile.ZipFile(old / "app1" / "raw.zip") as zf:
+        names = zf.namelist()
+    assert "raw/20260101T000000Z_iter1.log" in names
+    # iter JSON + CSV stripped, summary kept.
+    assert not (old / "app1" / "20260101T000000Z_iter1.json").exists()
+    assert not (old / "app1" / "20260101T000000Z_iter1.csv").exists()
+    assert (old / "app1" / "summary.md").exists()
+
+
+def test_cleanup_delete_removes_run_dir(tmp_path: Path) -> None:
+    from paperbark.dispatcher import cleanup_old_runs
+
+    today = datetime(2026, 5, 5, tzinfo=UTC)
+    old = _seed_old_run(tmp_path / "logs", "20260101", "0900_old")
+    cleanup_old_runs(tmp_path / "logs", days=1, mode="delete", today=today)
+    assert not old.exists()
+
+
+def test_cleanup_keeps_runs_inside_window(tmp_path: Path) -> None:
+    from paperbark.dispatcher import cleanup_old_runs
+
+    today = datetime(2026, 5, 5, tzinfo=UTC)
+    fresh = _seed_old_run(tmp_path / "logs", "20260505", "0900_today")
+    yesterday = _seed_old_run(tmp_path / "logs", "20260504", "0900_yesterday")
+    cleanup_old_runs(tmp_path / "logs", days=1, mode="delete", today=today)
+    assert fresh.exists()
+    assert yesterday.exists()
+
+
+def test_cleanup_zip_is_idempotent(tmp_path: Path) -> None:
+    from paperbark.dispatcher import cleanup_old_runs
+
+    today = datetime(2026, 5, 5, tzinfo=UTC)
+    old = _seed_old_run(tmp_path / "logs", "20260101", "0900_old")
+    cleanup_old_runs(tmp_path / "logs", days=1, mode="zip", today=today)
+    # Second pass must be a no-op once raw.zip exists; no error, no clobber.
+    cleanup_old_runs(tmp_path / "logs", days=1, mode="zip", today=today)
+    assert (old / "app1" / "raw.zip").exists()
+
+
+def test_cleanup_no_op_when_root_missing(tmp_path: Path) -> None:
+    from paperbark.dispatcher import cleanup_old_runs
+
+    cleanup_old_runs(tmp_path / "missing", days=1, mode="zip")  # must not raise
+
+
+def test_cleanup_rejects_invalid_mode(tmp_path: Path) -> None:
+    from paperbark.dispatcher import cleanup_old_runs
+
+    with pytest.raises(ValueError, match="cleanup mode must be"):
+        cleanup_old_runs(tmp_path, days=1, mode="bogus")
+
+
+# --- v0.1.1: parse-rate warning -------------------------------------------
+
+
+def test_loop_warns_on_silent_format_mismatch(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A source that captures lines but parses none should trip a warning.
+
+    Use an iteration count of 1 so the loop runs end-to-end with predictable
+    output. The line is plausibly a non-JSON shape (no embedded record)
+    so ``iteration._try_parse_json_record`` returns ``None`` for every line.
+    """
+    fixed = datetime(2026, 5, 3, 14, 30, 45, tzinfo=UTC)
+    plain_lines = [f"2026-05-03T02:00:0{i}Z plain text line without json\n" for i in range(6)]
+    cfg = Config(root=tmp_path / "logs")
+    monitor = MonitorConfig(interval=1, iterations=1, analyse_every=0, cleanup_enabled=False)
+    # ``_FakeMonotonic`` (used by the other loop tests in this file) advances
+    # on demand and never raises ``StopIteration`` if the loop's internal
+    # call count grows. Safer than a finite ``iter([...])``.
+    run_monitor_loop(
+        cfg,
+        monitor=monitor,
+        built_sources=[("nonjson", _FakeSource(plain_lines))],
+        stop_event=threading.Event(),
+        monotonic=_FakeMonotonic(),
+        clock=lambda: fixed,
+    )
+    err = capsys.readouterr().err
+    assert "source 'nonjson'" in err
+    assert "parsed 0/6 line(s)" in err
+    assert "(0%)" in err
+
+
+# Helper used by the parse-rate test — repurposed from earlier _FakeSource
+# but lifted here so the new tests stay self-contained.

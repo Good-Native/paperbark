@@ -151,7 +151,7 @@ Replace the entire set under
 
 Replace under `[probes.patterns].autoscaler`.
 
-### `Database / external` — toggle `database`
+### `External errors and timeouts` — toggle `database`
 
 | Label                       | Pattern                     |
 | --------------------------- | --------------------------- |
@@ -163,7 +163,12 @@ Replace under `[probes.patterns].autoscaler`.
 | `connection reset`          | `connection reset`          |
 | `too many connections`      | `too many connections`      |
 
-Replace under `[probes.patterns].database`.
+The toggle key stays `database` for config compatibility, but the
+heading is "External errors and timeouts" because the default pattern
+set matches generic Go context timeouts (`context deadline exceeded`,
+`i/o timeout`) that fire on outbound HTTP probes too — not just
+database calls. Operators who want a DB-only set can replace the patterns
+under `[probes.patterns].database`.
 
 ### `Sentry` — toggle `sentry`
 

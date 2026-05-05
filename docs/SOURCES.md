@@ -100,10 +100,12 @@ Wraps `flyctl logs --no-tail` for one Fly.io app per `[[sources]]`
 entry. Each `capture()` call runs a fresh subprocess and yields stdout
 line by line.
 
-| Option    | Type    | Default | Description                                                                                                                                                    |
-| --------- | ------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app`     | string  | —       | Required Fly.io app name. Passed as `flyctl logs -a <app>`.                                                                                                    |
-| `no_tail` | boolean | `true`  | Run with `--no-tail`. Streaming `flyctl logs` (without `--no-tail`) is intentionally unsupported in v1; cursor filtering assumes the one-shot capture pattern. |
+| Option        | Type    | Default | Description                                                                                                                                                    |
+| ------------- | ------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app`         | string  | —       | Required Fly.io app name. Passed as `flyctl logs -a <app>`.                                                                                                    |
+| `no_tail`     | boolean | `true`  | Run with `--no-tail`. Streaming `flyctl logs` (without `--no-tail`) is intentionally unsupported in v1; cursor filtering assumes the one-shot capture pattern. |
+| `samples`     | integer | `400`   | Per-iteration capture window size, passed as `-n <samples>`. Mirrors `reference/logs.sh`'s `--samples` default; raise it on busy apps to avoid dropped lines.  |
+| `format_keys` | table   | none    | Optional per-field JSON key overrides forwarded to the iteration parser. See [`docs/CONFIG.md`](CONFIG.md#flyctl-options) for shape and worked examples.       |
 
 Notes:
 

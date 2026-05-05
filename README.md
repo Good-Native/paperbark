@@ -70,6 +70,20 @@ for the full schema reference.
 See [`docs/SOURCES.md`](docs/SOURCES.md) for the `Source` interface and
 how to add a new one.
 
+## Log payload formats
+
+Today: **JSON-keyed payloads only**. Per-source `format_keys` lets you
+remap the canonical field names (timestamp / level / message / component)
+to whatever JSON keys your app emits — see
+[`docs/CONFIG.md`](docs/CONFIG.md#flyctl-options).
+
+Coming in v0.2: **regex named-group formats** for non-JSON shapes
+(pipe-delimited, syslog, Apache combined, nginx default, or any custom
+pattern). The format layer already ships three presets
+(`apache-combined`, `nginx-default`, `syslog-rfc5424`); they're not yet
+wired into iteration. Until then, non-JSON sources will trip the
+format-mismatch warning and probes will produce no findings.
+
 ## Probes
 
 Severity rollup, panics and fatals, HTTP status, latency (p50/p95/p99),
