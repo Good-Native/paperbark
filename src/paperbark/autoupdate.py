@@ -34,6 +34,7 @@ from paperbark import __version__
 PYPI_URL = "https://pypi.org/pypi/paperbark/json"
 PYPI_TIMEOUT_SECONDS = 2.0
 PROMPT_TIMEOUT_SECONDS = 10.0
+UPGRADE_TIMEOUT_SECONDS = 60.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +75,11 @@ def maybe_run(
     if os.environ.get("PAPERBARK_NO_AUTO_UPDATE"):
         return
     if _is_editable_install():
+        return
+    # Skip the PyPI lookup entirely for installs we can't safely upgrade
+    # (system Python, Homebrew). _detect_upgrade_command returns None for
+    # those, and we'd otherwise burn a network round-trip just to refuse.
+    if _detect_upgrade_command() is None:
         return
 
     out = stdout if stdout is not None else sys.stdout
@@ -177,7 +183,17 @@ def _run_upgrade_and_relaunch(stdout: IO[str], stderr: IO[str], argv: list[str] 
     stdout.write(f"running: {' '.join(cmd)}\n")
     stdout.flush()
     try:
-        proc = subprocess.run(cmd, check=False)  # noqa: S603 - args are a fixed allowlist
+        proc = subprocess.run(  # noqa: S603 - args are a fixed allowlist
+            cmd,
+            check=False,
+            timeout=UPGRADE_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        stderr.write(
+            f"upgrade timed out after {UPGRADE_TIMEOUT_SECONDS:.0f}s; "
+            f"run '{' '.join(cmd)}' manually.\n"
+        )
+        return
     except (OSError, subprocess.SubprocessError) as exc:
         stderr.write(f"upgrade failed: {exc}\n")
         return

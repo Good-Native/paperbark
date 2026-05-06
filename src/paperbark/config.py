@@ -102,7 +102,7 @@ DEFAULT_CLEANUP_DAYS = 1
 DEFAULT_CLEANUP_MODE = "zip"
 CLEANUP_MODES: tuple[str, ...] = ("zip", "delete")
 
-DEFAULT_AUTOUPDATE_CHECK_INTERVAL = 86_400  # 24h between PyPI lookups.
+DEFAULT_AUTOUPDATE_CHECK_INTERVAL_HOURS = 24
 DEFAULT_AUTOUPDATE_MODE = "prompt"
 AUTOUPDATE_MODES: tuple[str, ...] = ("prompt", "notify", "auto", "off")
 
@@ -256,7 +256,7 @@ class AutoupdateConfig:
 
     enabled: bool = True
     mode: str = DEFAULT_AUTOUPDATE_MODE
-    check_interval_hours: int = 24
+    check_interval_hours: int = DEFAULT_AUTOUPDATE_CHECK_INTERVAL_HOURS
 
 
 @dataclass(frozen=True, slots=True)
@@ -539,7 +539,7 @@ def _parse_autoupdate(raw: Any) -> AutoupdateConfig:
     if mode_raw not in AUTOUPDATE_MODES:
         joined = ", ".join(repr(m) for m in AUTOUPDATE_MODES)
         raise ConfigError(f"[autoupdate].mode must be one of {joined}")
-    interval_raw = table.get("check_interval_hours", 24)
+    interval_raw = table.get("check_interval_hours", DEFAULT_AUTOUPDATE_CHECK_INTERVAL_HOURS)
     if isinstance(interval_raw, bool) or not isinstance(interval_raw, int):
         raise ConfigError(
             f"[autoupdate].check_interval_hours must be an integer, "

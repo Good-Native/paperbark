@@ -252,6 +252,43 @@ def test_editable_install_skips(monkeypatch: pytest.MonkeyPatch) -> None:
     assert fetched == []
 
 
+def test_system_python_skips_before_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(autoupdate, "_detect_upgrade_command", lambda: None)
+    fetched: list[str] = []
+    monkeypatch.setattr(autoupdate, "_fetch_pypi_version", _stub_fetch(fetched, "9.9.9"))
+    autoupdate.maybe_run(**_common_kwargs())
+    assert fetched == []
+
+
+def test_autoupdate_flags_accepted_after_subcommand() -> None:
+    from paperbark.cli import _build_parser
+
+    # Both pre- and post-subcommand placements should parse cleanly so users
+    # don't have to remember a specific argv order.
+    parser = _build_parser()
+    args = parser.parse_args(["monitor", "-y", "--no-auto-update"])
+    assert args.command == "monitor"
+    assert args.assume_yes is True
+    assert args.auto_update is False
+
+
+def test_upgrade_timeout_is_handled(monkeypatch: pytest.MonkeyPatch) -> None:
+    import subprocess
+
+    monkeypatch.setattr(
+        autoupdate, "_detect_upgrade_command", lambda: ["/usr/bin/pipx", "upgrade", "paperbark"]
+    )
+
+    def _hang(*_args: Any, **_kwargs: Any) -> Any:
+        raise subprocess.TimeoutExpired(cmd="pipx", timeout=1.0)
+
+    monkeypatch.setattr("paperbark.autoupdate.subprocess.run", _hang)
+    out = _TTYBuffer()
+    err = _TTYBuffer()
+    autoupdate._run_upgrade_and_relaunch(out, err, ["paperbark", "monitor"])
+    assert "timed out" in err.getvalue()
+
+
 def test_is_newer_handles_unparseable_versions() -> None:
     assert autoupdate._is_newer("1.2.0", "1.0.0") is True
     assert autoupdate._is_newer("1.0.0", "1.0.0") is False
