@@ -19,6 +19,10 @@ from __future__ import annotations
 import subprocess
 from collections import deque
 from collections.abc import Callable, Iterator
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from paperbark.formats import Format
 
 _FLYCTL_TIMEOUT = 5.0  # seconds; how long to wait after terminate() before SIGKILL.
 DEFAULT_SAMPLES = 400
@@ -71,6 +75,7 @@ class FlyctlSource:
         no_tail: bool = True,
         samples: int = DEFAULT_SAMPLES,
         format_keys: dict[str, tuple[str, ...]] | None = None,
+        line_format: Format | None = None,
         runner: Callable[[list[str]], Iterator[str]] | None = None,
     ) -> None:
         if not app:
@@ -87,6 +92,15 @@ class FlyctlSource:
         own log shape. Operators whose lines don't fit the default keys
         can supply ``[[sources]].format_keys`` in TOML to override per
         canonical field — see :file:`docs/SOURCES.md`.
+        """
+        self.line_format = line_format
+        """Optional :class:`paperbark.formats.Format` for non-JSON shapes.
+
+        ``None`` (the default) keeps the JSON-keys parser; setting
+        ``[[sources]].format = "<preset>"`` (or a custom ``RegexFormat``
+        instance constructed in tests) routes each line through
+        :meth:`Format.parse` instead. ``format_keys`` is JSON-only and
+        rejected at config-load time when ``line_format`` is also set.
         """
         self._runner = runner or _default_runner
 

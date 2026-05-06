@@ -1,9 +1,11 @@
 """Per-iteration log processing: raw text → JSON summary.
 
-Reads raw log lines, parses any embedded JSON record, and emits the
-summary shape that :func:`paperbark.aggregate.merge_iteration` consumes.
-Optionally writes a flat per-line CSV alongside the summary for
-ad-hoc spreadsheet inspection.
+Reads raw log lines, parses any embedded JSON record (or matches a
+named-group regex when a :class:`paperbark.formats.Format` is supplied),
+and emits the summary shape that
+:func:`paperbark.aggregate.merge_iteration` consumes. Optionally writes
+a flat per-line CSV alongside the summary for ad-hoc spreadsheet
+inspection.
 
 Output shape (also written to disk as JSON)::
 
@@ -25,8 +27,11 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
+
+if TYPE_CHECKING:
+    from paperbark.formats import Format
 
 _LOCAL_TZ = ZoneInfo("Australia/Melbourne")
 DEFAULT_TIMESTAMP_KEYS = ("time", "timestamp", "@timestamp", "ts", "created_at")
@@ -70,6 +75,7 @@ def summarise_lines(
     source: str = "",
     flat_rows: list[dict[str, str]] | None = None,
     format_keys: dict[str, tuple[str, ...]] | None = None,
+    line_format: Format | None = None,
 ) -> dict[str, Any]:
     """Summarise an iterable of raw log ``lines``.
 
@@ -83,7 +89,23 @@ def summarise_lines(
     a parsed record. Unspecified fields keep their defaults; the loader
     is responsible for rejecting unknown field names so a typo can't
     silently disable a field.
+
+    ``line_format`` opts the parser onto the format layer instead of the
+    default JSON path: when supplied, every line is fed through
+    ``line_format.parse()`` and the resulting :class:`CanonicalRecord` drives
+    the per-minute counts. This is what ``[[sources]].format = "<preset>"``
+    resolves to — non-JSON shapes (Apache combined, nginx default, RFC 5424
+    syslog, custom regex) parse correctly without forking. ``format_keys``
+    is JSON-specific and must be ``None`` when ``line_format`` is supplied;
+    the dispatcher rejects the conflict at config-load time.
     """
+    if line_format is not None:
+        return _summarise_with_format(
+            lines,
+            source=source,
+            flat_rows=flat_rows,
+            line_format=line_format,
+        )
     keys = _resolved_format_keys(format_keys)
     timestamp_keys = keys["timestamp"]
     level_keys = keys["level"]
@@ -156,12 +178,14 @@ def summarise_log_file(
     *,
     flat_csv_path: Path | None = None,
     format_keys: dict[str, tuple[str, ...]] | None = None,
+    line_format: Format | None = None,
 ) -> dict[str, Any]:
     """Summarise the raw log file at ``raw_path``.
 
     Always returns the summary dict. When ``flat_csv_path`` is supplied
     a flat per-line CSV is written there as a side effect. ``format_keys``
-    is forwarded to :func:`summarise_lines` for per-source key overrides.
+    and ``line_format`` are forwarded to :func:`summarise_lines`; pass at
+    most one (the dispatcher rejects the conflict at config-load time).
     """
     flat_rows: list[dict[str, str]] | None = [] if flat_csv_path else None
     with raw_path.open("r", encoding="utf-8", errors="ignore") as handle:
@@ -170,6 +194,7 @@ def summarise_log_file(
             source=str(raw_path),
             flat_rows=flat_rows,
             format_keys=format_keys,
+            line_format=line_format,
         )
     if flat_csv_path is not None and flat_rows is not None:
         write_flat_csv(flat_csv_path, flat_rows)
@@ -210,6 +235,109 @@ def cli(argv: list[str] | None = None) -> int:
 
 
 # --- Internals --------------------------------------------------------------
+
+
+def _summarise_with_format(
+    lines: Iterable[str],
+    *,
+    source: str,
+    flat_rows: list[dict[str, str]] | None,
+    line_format: Format,
+) -> dict[str, Any]:
+    """Format-driven counterpart of :func:`summarise_lines`.
+
+    Routes each line through ``line_format.parse()`` and aggregates the
+    same per-minute counts as the JSON path. A line is "parsed" when the
+    format produced a usable record — at least one canonical field
+    (timestamp, level, message, or component) came back non-empty. The
+    JSON-keys path uses the same heuristic implicitly because a JSON
+    decode failure leaves the line unparsed; for regex formats we make
+    the check explicit so a non-matching line counts as
+    ``failed_to_parse`` rather than a noise record.
+    """
+    level_counts: dict[str, Counter[str]] = defaultdict(Counter)
+    component_counts: dict[str, Counter[str]] = defaultdict(Counter)
+    event_counts: dict[str, Counter[str]] = defaultdict(Counter)
+    warn_error_counts: Counter[str] = Counter()
+    total = 0
+    parsed = 0
+    errors = 0
+    for line in lines:
+        total += 1
+        record = line_format.parse(line)
+        if not _format_record_parsed(record):
+            errors += 1
+            continue
+        parsed += 1
+        minute = _format_minute_key(record.timestamp)
+        level = (record.level or _UNKNOWN).lower()
+        component = record.component or _UNKNOWN
+        message = record.message or "<no message>"
+        message = _strip_component_prefix(message, component)
+        event = f"{component}: {message}"
+
+        level_counts[minute][level] += 1
+        component_counts[minute][component] += 1
+        event_counts[minute][event] += 1
+        if level in ("warn", "error"):
+            warn_error_counts[event] += 1
+
+        if flat_rows is not None:
+            # Regex/format records carry no JSON object, so the extras
+            # column (free-form key/value blob) is always empty here.
+            flat_rows.append(
+                {
+                    "timestamp": record.timestamp,
+                    "level": level,
+                    "component": component,
+                    "message": message,
+                    "extras": "",
+                }
+            )
+
+    return {
+        "meta": {
+            "source": source,
+            "total_lines": total,
+            "parsed": parsed,
+            "failed_to_parse": errors,
+            "generated_at": datetime.now(_LOCAL_TZ).isoformat(),
+        },
+        "level_counts": {m: dict(c) for m, c in level_counts.items()},
+        "component_counts": {m: dict(c) for m, c in component_counts.items()},
+        "event_counts": {
+            m: [
+                {"event": event, "count": count}
+                for event, count in sorted(c.items(), key=lambda x: -x[1])
+            ]
+            for m, c in event_counts.items()
+        },
+        "warn_error_counts": dict(warn_error_counts),
+    }
+
+
+def _format_record_parsed(record: Any) -> bool:
+    """Return ``True`` when at least one canonical field is populated.
+
+    ``Format.parse`` always returns a record; for regex formats a
+    non-matching line yields all-empty fields (``RegexFormat._empty``).
+    Treating that as ``failed_to_parse`` keeps the meta-counts honest
+    instead of inflating the parsed count with empty rows.
+    """
+    return bool(record.timestamp or record.level or record.message or record.component)
+
+
+def _format_minute_key(timestamp: str) -> str:
+    """Derive a ``YYYY-MM-DDTHH:MM`` minute bucket from a canonical timestamp.
+
+    :class:`CanonicalRecord` timestamps are already ISO-formatted by the
+    format layer, so this is a straight slice rather than a re-parse. An
+    empty timestamp falls through to the same ``unknown`` bucket the JSON
+    path uses, keeping aggregation consistent across format choices.
+    """
+    if not timestamp:
+        return _UNKNOWN
+    return timestamp[:16]
 
 
 def _try_parse_json_record(line: str) -> dict[str, Any] | None:

@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from paperbark.aggregate import AggregateState, merge_iteration
+from paperbark.formats import apache_combined, syslog_rfc5424
 from paperbark.iteration import (
     cli,
     summarise_lines,
@@ -151,3 +152,66 @@ def test_cli_rejects_wrong_arg_count() -> None:
     assert cli([]) == 1
     assert cli(["only-one"]) == 1
     assert cli(["a", "b", "c"]) == 1
+
+
+# --- v0.2: regex-format presets via line_format ---------------------------
+
+
+def test_summarise_lines_with_apache_format_buckets_by_minute() -> None:
+    """A regex preset on ``[[sources]].format`` should produce the same
+    summary shape as JSON, just with timestamps derived from the matched
+    timestamp group rather than a JSON field.
+    """
+    apache = apache_combined()
+    lines = [
+        '127.0.0.1 - - [10/Oct/2000:13:55:00 -0700] "GET /a HTTP/1.0" 200 12\n',
+        '127.0.0.1 - - [10/Oct/2000:13:55:30 -0700] "GET /b HTTP/1.0" 500 0\n',
+        '127.0.0.1 - - [10/Oct/2000:13:56:00 -0700] "GET /c HTTP/1.0" 404 7\n',
+        "not an apache line at all\n",
+    ]
+    summary = summarise_lines(lines, line_format=apache)
+    assert summary["meta"]["total_lines"] == 4
+    assert summary["meta"]["parsed"] == 3
+    assert summary["meta"]["failed_to_parse"] == 1
+    minute_keys = sorted(summary["level_counts"].keys())
+    assert minute_keys == ["2000-10-10T13:55", "2000-10-10T13:56"]
+
+
+def test_summarise_lines_format_writes_flat_rows_with_empty_extras() -> None:
+    apache = apache_combined()
+    flat: list[dict[str, str]] = []
+    summarise_lines(
+        ['127.0.0.1 - - [10/Oct/2000:13:55:00 -0700] "GET /a HTTP/1.0" 200 12\n'],
+        flat_rows=flat,
+        line_format=apache,
+    )
+    assert len(flat) == 1
+    assert flat[0]["message"] == "/a"
+    assert flat[0]["extras"] == ""
+
+
+def test_summarise_lines_syslog_format_derives_level_from_priority() -> None:
+    """The RFC 5424 preset maps the priority byte to a canonical level.
+
+    Priority 11 (facility 1, severity 3 = err) should land in the ``error``
+    bucket so severity probes downstream still fire on regex-formatted
+    payloads.
+    """
+    summary = summarise_lines(
+        [
+            "<11>1 2026-05-03T02:00:00Z host app proc - - boom\n",
+        ],
+        line_format=syslog_rfc5424(),
+    )
+    assert summary["meta"]["parsed"] == 1
+    assert summary["level_counts"]["2026-05-03T02:00"] == {"error": 1}
+
+
+def test_summarise_log_file_threads_line_format(tmp_path: Path) -> None:
+    raw = tmp_path / "access.log"
+    raw.write_text(
+        '127.0.0.1 - - [10/Oct/2000:13:55:00 -0700] "GET /a HTTP/1.0" 200 12\n',
+        encoding="utf-8",
+    )
+    summary = summarise_log_file(raw, line_format=apache_combined())
+    assert summary["meta"]["parsed"] == 1
