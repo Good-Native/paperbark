@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-05-06
+
 ### Added
 
 - `paperbark monitor` now prints a startup banner to the terminal — bash
@@ -25,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   interleave JSON records with plain keepalives or platform notices).
   The diagnostic line stays in `monitor.log` so genuine silent-failure
   cases can still be traced after the fact.
+- TOML comment reduction across shipped configs and templates so
+  defaults are easier to scan.
 
 ## [0.1.1] - 2026-05-05
 
