@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
 - The `file` source is now a real implementation: it reads a single
   text file from disk and yields its lines, with an optional
   `encoding` knob (default `"utf-8"`, undecodable bytes replaced with
