@@ -246,7 +246,35 @@ only flow end-to-end through sources that don't rely on overlap dedup
 cursor filter will drop the lines before they reach the parser; see
 [`docs/SOURCES.md`](SOURCES.md) for the matrix.
 
-#### `wrangler`, `kubectl`, `cloudwatch`, `file`, `stdin`
+#### `file` options
+
+Reads a single text file from disk. Each `capture()` re-opens the
+file and streams it from the start; the cursor filter handles
+cross-iteration dedup.
+
+| Key           | Type   | Default   | Description                                                                                                        |
+| ------------- | ------ | --------- | ------------------------------------------------------------------------------------------------------------------ |
+| `path`        | string | —         | Required path to the log file. Existence is checked at capture time, not at config load.                           |
+| `encoding`    | string | `"utf-8"` | Text encoding to decode with. Undecodable bytes are replaced with `U+FFFD` so a stray byte never aborts a capture. |
+| `format`      | string | `"json"`  | Same regex-preset selector as `flyctl` — see the `flyctl` row above. The cursor-filter caveat applies here too.    |
+| `format_keys` | table  | none      | JSON-keys overrides; rejected when combined with a non-`json` `format`.                                            |
+
+```toml
+[[sources]]
+name = "audit"
+type = "file"
+path = "/var/log/audit.log"
+```
+
+Cursor filtering still keys on a leading ISO-8601 timestamp. Files
+whose lines don't lead with one (Apache combined, nginx default, RFC
+5424 syslog) are dropped by the cursor filter even on the first
+iteration; for those, capture once and run `paperbark analyse` /
+`paperbark search` over the captured run rather than driving them
+through `paperbark monitor`. Format-aware cursoring is on the v0.2+
+list.
+
+#### `wrangler`, `kubectl`, `cloudwatch`, `stdin`
 
 Stubs in v1. They satisfy the `Source` Protocol so the config layer can
 name them, but `capture()` raises `NotImplementedError`. See

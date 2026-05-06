@@ -77,7 +77,7 @@ def test_build_source_flyctl_rejects_unknown_option() -> None:
         build_source(spec)
 
 
-@pytest.mark.parametrize("type_", ["wrangler", "kubectl", "cloudwatch", "file", "stdin"])
+@pytest.mark.parametrize("type_", ["wrangler", "kubectl", "cloudwatch", "stdin"])
 def test_build_source_stub_rejects_unknown_option(type_: str) -> None:
     spec = SourceConfig(name="x", type=type_, options={"path": "/var/log/foo"})
     with pytest.raises(DispatcherError, match=r"unknown option\(s\) 'path'"):
@@ -90,13 +90,20 @@ def test_build_source_stub_rejects_unknown_option(type_: str) -> None:
         ("wrangler", WranglerSource),
         ("kubectl", KubectlSource),
         ("cloudwatch", CloudWatchSource),
-        ("file", FileSource),
         ("stdin", StdinSource),
     ],
 )
 def test_build_source_returns_stub_classes(type_: str, expected_class: type[Source]) -> None:
     spec = SourceConfig(name="x", type=type_, options={})
     assert isinstance(build_source(spec), expected_class)
+
+
+def test_build_source_file_returns_file_instance(tmp_path: Path) -> None:
+    """``file`` is a real source now — needs a ``path`` option to construct."""
+    log = tmp_path / "x.log"
+    log.write_text("", encoding="utf-8")
+    spec = SourceConfig(name="x", type="file", options={"path": str(log)})
+    assert isinstance(build_source(spec), FileSource)
 
 
 def test_build_sources_preserves_order_and_names() -> None:
@@ -945,3 +952,108 @@ def test_run_monitor_loop_fires_on_start_with_run_metadata(tmp_path: Path) -> No
 
 # Helper used by the parse-rate test — repurposed from earlier _FakeSource
 # but lifted here so the new tests stay self-contained.
+
+
+# --- v0.2: real file source -----------------------------------------------
+
+
+def test_build_source_file_requires_path() -> None:
+    spec = SourceConfig(name="x", type="file", options={})
+    with pytest.raises(DispatcherError, match="'path' is required"):
+        build_source(spec)
+
+
+def test_build_source_file_rejects_non_string_path() -> None:
+    spec = SourceConfig(name="x", type="file", options={"path": 123})
+    with pytest.raises(DispatcherError, match="'path' is required"):
+        build_source(spec)
+
+
+def test_build_source_file_rejects_empty_path() -> None:
+    spec = SourceConfig(name="x", type="file", options={"path": ""})
+    with pytest.raises(DispatcherError, match="'path' is required"):
+        build_source(spec)
+
+
+def test_build_source_file_rejects_unknown_option(tmp_path: Path) -> None:
+    log = tmp_path / "x.log"
+    log.write_text("", encoding="utf-8")
+    spec = SourceConfig(
+        name="x",
+        type="file",
+        options={"path": str(log), "no_tail": True},
+    )
+    with pytest.raises(DispatcherError, match="unknown option"):
+        build_source(spec)
+
+
+def test_build_source_file_threads_encoding(tmp_path: Path) -> None:
+    log = tmp_path / "x.log"
+    log.write_text("", encoding="utf-8")
+    spec = SourceConfig(
+        name="x",
+        type="file",
+        options={"path": str(log), "encoding": "latin-1"},
+    )
+    source = build_source(spec)
+    assert isinstance(source, FileSource)
+    assert source.encoding == "latin-1"
+
+
+def test_build_source_file_attaches_format_preset(tmp_path: Path) -> None:
+    from paperbark.formats import RegexFormat
+
+    log = tmp_path / "x.log"
+    log.write_text("", encoding="utf-8")
+    spec = SourceConfig(
+        name="x",
+        type="file",
+        options={"path": str(log), "format": "apache-combined"},
+    )
+    source = build_source(spec)
+    assert isinstance(source, FileSource)
+    assert isinstance(source.line_format, RegexFormat)
+    assert source.line_format.name == "apache-combined"
+
+
+def test_build_source_file_rejects_format_with_format_keys(tmp_path: Path) -> None:
+    log = tmp_path / "x.log"
+    log.write_text("", encoding="utf-8")
+    spec = SourceConfig(
+        name="x",
+        type="file",
+        options={
+            "path": str(log),
+            "format": "apache-combined",
+            "format_keys": {"timestamp": "ts"},
+        },
+    )
+    with pytest.raises(DispatcherError, match="'format_keys' is JSON-only"):
+        build_source(spec)
+
+
+def test_capture_iteration_with_file_source_processes_file_lines(tmp_path: Path) -> None:
+    """End-to-end: a ``file`` source feeds the cursor filter and iteration
+    parser the same way ``flyctl`` does. We use leading-ISO-TS lines so
+    the cursor filter passes them through (the documented constraint for
+    non-leading-TS shapes is in ``docs/SOURCES.md``).
+    """
+    fixed = datetime(2026, 5, 3, 14, 30, 45, tzinfo=UTC)
+    log = tmp_path / "input.log"
+    info_payload = '{"time":"2026-05-03T02:00:01Z","level":"info","component":"api","msg":"hello"}'
+    warn_payload = (
+        '{"time":"2026-05-03T02:01:00Z","level":"warn","component":"worker","msg":"slow"}'
+    )
+    log.write_text(
+        f"2026-05-03T02:00:01Z {info_payload}\n2026-05-03T02:01:00Z {warn_payload}\n",
+        encoding="utf-8",
+    )
+    from paperbark.sources import FileSource as _FileSource
+
+    source = _FileSource(path=log)
+    raw_log, summary_json = capture_iteration(source, tmp_path / "app", 1, now=fixed)
+    summary = json.loads(summary_json.read_text(encoding="utf-8"))
+    assert summary["meta"]["total_lines"] == 2
+    assert summary["meta"]["parsed"] == 2
+    assert summary["warn_error_counts"] == {"worker: slow": 1}
+    raw_log.unlink()

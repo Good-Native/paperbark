@@ -18,7 +18,7 @@ Built-in sources sit alongside it under `src/paperbark/sources/`.
 | Cloudflare (`wrangler`) | [`wrangler.py`](../src/paperbark/sources/wrangler.py)     | stub (raises on capture) |
 | Kubernetes (`kubectl`)  | [`kubectl.py`](../src/paperbark/sources/kubectl.py)       | stub (raises on capture) |
 | AWS CloudWatch          | [`cloudwatch.py`](../src/paperbark/sources/cloudwatch.py) | stub (raises on capture) |
-| Plain files             | [`file.py`](../src/paperbark/sources/file.py)             | stub (raises on capture) |
+| Plain files             | [`file.py`](../src/paperbark/sources/file.py)             | implemented              |
 | stdin                   | [`stdin.py`](../src/paperbark/sources/stdin.py)           | stub (raises on capture) |
 
 Stubs satisfy the `Source` Protocol so the config layer can resolve a
@@ -118,9 +118,42 @@ Notes:
 - The runner subprocess is terminated cleanly on early consumer exit
   (a `break` or generator close), with a 5-second grace before SIGKILL.
 
-### Stubs (`wrangler`, `kubectl`, `cloudwatch`, `file`, `stdin`)
+### `file`
 
-All five are placeholders: `capture()` raises `NotImplementedError`.
+Reads a single text file from disk and yields its lines. Each
+`capture()` call re-opens the file and streams it from the start —
+the source is stateless across calls (per the project's source
+contract), and the cursor filter handles cross-iteration dedup.
+
+| Option        | Type   | Default   | Description                                                                                                                                    |
+| ------------- | ------ | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `path`        | string | —         | Required path to the log file. Existence is checked at capture time, not at config load — log files often appear and disappear under rotation. |
+| `encoding`    | string | `"utf-8"` | Text encoding to decode the file with. Undecodable bytes are replaced with `U+FFFD` so a stray byte never aborts a capture.                    |
+| `format`      | string | `"json"`  | Same regex-preset selector as `flyctl`; see [`docs/CONFIG.md`](CONFIG.md#flyctl-options).                                                      |
+| `format_keys` | table  | none      | JSON-keys overrides; rejected when combined with a non-`json` `format`.                                                                        |
+
+Notes:
+
+- The `since` advisory parameter is silently ignored — the source has
+  no upstream query to forward it to, and cursor filtering bounds
+  output regardless.
+- Cursor filtering still keys on a leading ISO-8601 timestamp.
+  Log shapes that lead with a timestamp (Fly-style JSON-with-prefix,
+  syslog emitted with a leading TS) dedup correctly across iterations.
+  Shapes whose lines don't lead with an ISO timestamp (Apache combined,
+  nginx default, RFC 5424's `<PRI>1` prefix) are dropped by the cursor
+  filter, even on the first iteration. A format-aware cursor mode is
+  on the v0.2+ list; until then, run such files through
+  `paperbark analyse` / `paperbark search` after a one-shot capture
+  rather than relying on the long-running `paperbark monitor` loop.
+- Log rotation is the source's responsibility, not paperbark's. If the
+  file is replaced (e.g. by `logrotate create`) between iterations the
+  next `capture()` reads the new file from the start; the cursor filter
+  may still drop replays whose timestamps overlap the cursor.
+
+### Stubs (`wrangler`, `kubectl`, `cloudwatch`, `stdin`)
+
+These four are placeholders: `capture()` raises `NotImplementedError`.
 They exist so a config that names one of these `type`s validates and
 resolves at parse time, and so the registry and dispatcher round-trip
 tests cover the eventual real implementation paths.
@@ -133,9 +166,6 @@ The expected shape when these land:
   selectors. Will likely accept `since` natively.
 - **`cloudwatch`** uses the AWS SDK's `filter_log_events` against one
   log group per source. `since` maps to `startTime`.
-- **`file`** tails (or one-shot reads) a path on disk. The simplest of
-  the lot; useful for testing and for ingesting logs already pulled
-  by another tool.
 - **`stdin`** reads lines from `sys.stdin`. Intended for piping
   pre-captured logs into `paperbark analyse` / `paperbark search`.
 

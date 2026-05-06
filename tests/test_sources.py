@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 
@@ -86,7 +87,7 @@ def test_flyctl_requires_app_name() -> None:
 
 @pytest.mark.parametrize(
     "stub_class",
-    [WranglerSource, KubectlSource, CloudWatchSource, FileSource, StdinSource],
+    [WranglerSource, KubectlSource, CloudWatchSource, StdinSource],
 )
 def test_stub_sources_raise_not_implemented_on_capture(
     stub_class: type[Source],
@@ -101,8 +102,53 @@ def test_stubs_are_protocol_compatible() -> None:
         WranglerSource,
         KubectlSource,
         CloudWatchSource,
-        FileSource,
         StdinSource,
     ):
         instance = stub_class()
         assert isinstance(instance, Source)
+
+
+# --- v0.2: real file source -----------------------------------------------
+
+
+def test_file_source_yields_lines_from_disk(tmp_path: Path) -> None:
+    log = tmp_path / "app.log"
+    log.write_text("alpha\nbravo\ncharlie\n", encoding="utf-8")
+    source = FileSource(path=log)
+    assert list(source.capture()) == ["alpha\n", "bravo\n", "charlie\n"]
+
+
+def test_file_source_satisfies_protocol(tmp_path: Path) -> None:
+    log = tmp_path / "x.log"
+    log.write_text("", encoding="utf-8")
+    source = FileSource(path=log)
+    assert isinstance(source, Source)
+
+
+def test_file_source_requires_non_empty_path() -> None:
+    with pytest.raises(ValueError, match="non-empty path"):
+        FileSource(path="")
+
+
+def test_file_source_capture_raises_when_file_missing(tmp_path: Path) -> None:
+    source = FileSource(path=tmp_path / "does-not-exist.log")
+    with pytest.raises(FileNotFoundError):
+        list(source.capture())
+
+
+def test_file_source_decodes_with_encoding(tmp_path: Path) -> None:
+    log = tmp_path / "latin.log"
+    log.write_bytes("café\n".encode("latin-1"))
+    source = FileSource(path=log, encoding="latin-1")
+    assert list(source.capture()) == ["café\n"]
+
+
+def test_file_source_replaces_undecodable_bytes(tmp_path: Path) -> None:
+    """A stray byte that can't decode as UTF-8 must not abort capture —
+    we'd rather emit a replacement char than drop a record entirely."""
+    log = tmp_path / "mixed.log"
+    log.write_bytes(b"good\n\xff bad\n")
+    source = FileSource(path=log)
+    lines = list(source.capture())
+    assert lines[0] == "good\n"
+    assert "bad" in lines[1]
