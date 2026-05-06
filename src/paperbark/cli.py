@@ -31,9 +31,32 @@ _NOT_IMPLEMENTED_EXIT = 2
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    # Auto-update flags share a parent parser so they're valid both before
+    # the subcommand (`paperbark -y monitor`) and after (`paperbark monitor
+    # -y`). argparse only routes flags to the parser they're declared on,
+    # so without the parents= attachment the post-subcommand form would
+    # die with "unrecognized arguments".
+    autoupdate_flags = argparse.ArgumentParser(add_help=False)
+    autoupdate_flags.add_argument(
+        "--no-auto-update",
+        dest="auto_update",
+        action="store_false",
+        default=None,
+        help="Skip the PyPI version check and upgrade prompt for this run.",
+    )
+    autoupdate_flags.add_argument(
+        "-y",
+        "--yes",
+        dest="assume_yes",
+        action="store_true",
+        default=False,
+        help="Auto-accept the upgrade prompt without asking.",
+    )
+
     parser = argparse.ArgumentParser(
         prog="paperbark",
         description="Configurable cross-source log capture, search, and analysis CLI.",
+        parents=[autoupdate_flags],
     )
     parser.add_argument(
         "--version",
@@ -46,6 +69,7 @@ def _build_parser() -> argparse.ArgumentParser:
     monitor = subparsers.add_parser(
         "monitor",
         help="Capture logs from configured sources and run probes (default).",
+        parents=[autoupdate_flags],
     )
     monitor.add_argument(
         "--config",
@@ -111,6 +135,7 @@ def _build_parser() -> argparse.ArgumentParser:
     search = subparsers.add_parser(
         "search",
         help="Search across captured runs.",
+        parents=[autoupdate_flags],
     )
     search.add_argument(
         "--config",
@@ -192,6 +217,7 @@ def _build_parser() -> argparse.ArgumentParser:
     analyse = subparsers.add_parser(
         "analyse",
         help="Re-run analysis over an existing capture.",
+        parents=[autoupdate_flags],
     )
     analyse.add_argument(
         "--config",
@@ -249,6 +275,7 @@ def _build_parser() -> argparse.ArgumentParser:
     init = subparsers.add_parser(
         "init",
         help="Write a starter paperbark.toml in the current directory.",
+        parents=[autoupdate_flags],
     )
     init.add_argument(
         "--path",
@@ -269,6 +296,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     command = args.command or "monitor"
+
+    # Skip the PyPI check on `init` (first-run friendliness) and when the
+    # user opts out via flag. Other subcommands always pass through, so a
+    # routine `paperbark monitor` invocation gets the prompt at most once
+    # per ``check_interval_hours``.
+    if command != "init" and getattr(args, "auto_update", None) is not False:
+        _maybe_autoupdate(args)
 
     if command == "search":
         try:
@@ -295,6 +329,33 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     sys.stderr.write(f"paperbark {__version__}: '{command}' is not yet implemented.\n")
     return _NOT_IMPLEMENTED_EXIT
+
+
+def _maybe_autoupdate(args: argparse.Namespace) -> None:
+    """Run the PyPI version check ahead of the real subcommand.
+
+    The autoupdate config lives inside ``paperbark.toml``; if discovery or
+    parsing fails we silently fall back to defaults rather than blocking the
+    user's command. The actual subcommand still does its own strict load
+    afterwards, so a malformed config will surface there with a typed error.
+    """
+    from paperbark import autoupdate
+    from paperbark.config import AutoupdateConfig, ConfigError, load
+
+    config_arg = getattr(args, "config", None)
+    config_path = Path(config_arg) if config_arg else None
+    try:
+        cfg = load(config_path)
+        autoupdate_cfg = cfg.autoupdate
+    except (ConfigError, OSError):
+        autoupdate_cfg = AutoupdateConfig()
+
+    autoupdate.maybe_run(
+        enabled=autoupdate_cfg.enabled,
+        mode=autoupdate_cfg.mode,
+        check_interval_hours=autoupdate_cfg.check_interval_hours,
+        assume_yes=bool(getattr(args, "assume_yes", False)),
+    )
 
 
 def _load_config(args: argparse.Namespace) -> Config | int:

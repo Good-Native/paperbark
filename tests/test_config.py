@@ -498,3 +498,40 @@ def test_search_case_sensitive_must_be_bool() -> None:
 def test_search_section_must_be_table() -> None:
     with pytest.raises(ConfigError, match=r"\[search\] must be a table"):
         from_dict({"search": [1, 2]})
+
+
+def test_autoupdate_defaults() -> None:
+    config = Config.defaults()
+    assert config.autoupdate.enabled is True
+    assert config.autoupdate.mode == "prompt"
+    assert config.autoupdate.check_interval_hours == 24
+
+
+def test_autoupdate_round_trips() -> None:
+    config = from_dict(
+        {
+            "autoupdate": {
+                "enabled": False,
+                "mode": "notify",
+                "check_interval_hours": 6,
+            }
+        }
+    )
+    assert config.autoupdate.enabled is False
+    assert config.autoupdate.mode == "notify"
+    assert config.autoupdate.check_interval_hours == 6
+
+
+def test_autoupdate_invalid_mode() -> None:
+    with pytest.raises(ConfigError, match=r"\[autoupdate\]\.mode must be one of"):
+        from_dict({"autoupdate": {"mode": "shouty"}})
+
+
+def test_autoupdate_negative_interval_rejected() -> None:
+    with pytest.raises(ConfigError, match=r"\[autoupdate\]\.check_interval_hours must be >= 0"):
+        from_dict({"autoupdate": {"check_interval_hours": -1}})
+
+
+def test_autoupdate_section_must_be_table() -> None:
+    with pytest.raises(ConfigError, match=r"\[autoupdate\] must be a table"):
+        from_dict({"autoupdate": [1, 2]})
