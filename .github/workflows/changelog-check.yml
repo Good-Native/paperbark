@@ -1,0 +1,153 @@
+name: Changelog Check
+
+# All ${{ }} expressions are surfaced through env: vars before being read in
+# run: blocks (or referenced via process.env in github-script), so untrusted
+# changelog content can't break out of the shell or the JS context.
+
+on:
+  pull_request:
+    branches:
+      - main
+    # `paths` (not `paths-ignore`) so negation is supported. Run on
+    # every change, then exclude docs/license/markdown, then re-include
+    # CHANGELOG.md so a changelog-only PR still triggers the gate.
+    paths:
+      - "**"
+      - "!**/*.md"
+      - "!docs/**"
+      - "!LICENSE"
+      - "!.gitignore"
+      - "!SECURITY.md"
+      - "CHANGELOG.md"
+
+jobs:
+  check-changelog:
+    name: Validate Changelog Updated
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for changelog updates
+        id: check
+        env:
+          COMPARE_REF: origin/main
+        run: |
+          if ! grep -q "^## \[Unreleased" CHANGELOG.md; then
+            echo "::error::No [Unreleased] section found in CHANGELOG.md"
+            echo ""
+            echo "Please add a changelog entry for your changes:"
+            echo "  ## [Unreleased]          → for patch releases"
+            echo "  ## [Unreleased:minor]    → for minor releases"
+            echo "  ## [Unreleased:major]    → for major releases"
+            exit 1
+          fi
+
+          if ! grep -q "^## Full changelog history$" CHANGELOG.md; then
+            echo "::error::No permanent history marker found in CHANGELOG.md"
+            echo ""
+            echo "Expected this heading between the unreleased section and version history:"
+            echo "  ## Full changelog history"
+            exit 1
+          fi
+
+          # PR-level enforcement: every PR must add new content under
+          # [Unreleased]. Compare the unreleased section between
+          # origin/main and HEAD; if they're identical, the PR didn't
+          # add anything and is rejected. Catches the failure mode where
+          # [Unreleased] is non-empty (because previous PRs accumulated
+          # entries) but the current PR forgot to add one.
+          extract_unreleased() {
+            awk '
+              /^## \[Unreleased/ {f=1; next}
+              /^## Full changelog history$/ {f=0}
+              /^## \[[0-9]/ {f=0}
+              f
+            ' "$1" | sed '/^_Add unreleased changes here\._$/d' | sed '/^[[:space:]]*$/d'
+          }
+
+          MAIN_UNRELEASED=$(git show "$COMPARE_REF":CHANGELOG.md 2>/dev/null | extract_unreleased /dev/stdin || true)
+          HEAD_UNRELEASED=$(extract_unreleased CHANGELOG.md)
+
+          if [ "$MAIN_UNRELEASED" = "$HEAD_UNRELEASED" ]; then
+            echo "::error::This PR did not add any new entry under ## [Unreleased]."
+            echo ""
+            echo "Every PR to main must add at least one line under ## [Unreleased]"
+            echo "in CHANGELOG.md describing the change. For example:"
+            echo ""
+            echo "  ## [Unreleased]"
+            echo ""
+            echo "  ### Changed"
+            echo "  - Brief description of the change."
+            echo ""
+            echo "If your change really does not warrant a changelog entry, justify"
+            echo "it explicitly in the PR description and apply the 'no-release'"
+            echo "label to skip the auto-release on merge."
+            exit 1
+          fi
+
+          bash .github/scripts/changelog-version.sh
+
+          echo "Changelog has new content under [Unreleased]"
+
+      - name: Comment on PR with version info
+        uses: actions/github-script@v7
+        env:
+          RELEASE_TYPE: ${{ steps.check.outputs.release_type }}
+          CURRENT_VERSION: ${{ steps.check.outputs.current_version }}
+          NEXT_VERSION: ${{ steps.check.outputs.next_version }}
+          CHANGELOG_CONTENT: ${{ steps.check.outputs.changelog_content }}
+        with:
+          script: |
+            const releaseType = process.env.RELEASE_TYPE;
+            const currentVersion = process.env.CURRENT_VERSION;
+            const nextVersion = process.env.NEXT_VERSION;
+            const changelogContent = (process.env.CHANGELOG_CONTENT || '').trim();
+
+            // Hidden marker so the bot only edits its own comment (not
+            // any other bot whose body happens to mention "Release
+            // Preview").
+            const MARKER = '<!-- changelog-check-release-preview -->';
+
+            const lines = [
+              MARKER,
+              `# Release Preview`,
+              ``,
+              `**${releaseType}**: \`${currentVersion}\` → \`${nextVersion}\``,
+            ];
+            if (changelogContent) {
+              lines.push(``, `# Changelog`, ``, changelogContent);
+            }
+            const body = lines.join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+
+            const botComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes(MARKER)
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body
+              });
+            }

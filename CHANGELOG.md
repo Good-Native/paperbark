@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Changelog-driven release automation. PRs are gated by
+  `.github/workflows/changelog-check.yml`, which fails the run unless a
+  PR adds a fresh entry under `## [Unreleased]` (or `[Unreleased:minor]`
+  / `[Unreleased:major]` for non-patch bumps), and posts a release-
+  preview comment on the PR with the computed `current → next` version
+  and the rendered changelog excerpt. On merge to `main`,
+  `.github/workflows/auto-release.yml` rewrites the unreleased heading
+  to `## [X.Y.Z] – YYYY-MM-DD`, bumps `pyproject.toml`, commits, tags,
+  creates a GitHub release, and triggers `publish.yml` to ship to PyPI.
+  Apply the `no-release` label to skip the release step on chore-only
+  merges. Shared parsing/version logic lives in
+  `.github/scripts/changelog-version.sh` so the gate and the release
+  workflow agree on what counts as releasable.
+
+## Full changelog history
+
+## [0.1.4] - 2026-05-06
+
+### Added
+
 - The cursor filter is now format-aware. When a source attaches a
   `line_format` (via `[[sources]].format = "<preset>"` or a custom
   `RegexFormat`), the cursor advances from the timestamp the format

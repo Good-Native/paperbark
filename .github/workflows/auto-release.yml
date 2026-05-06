@@ -1,0 +1,203 @@
+name: Auto Release
+
+# Triggered on every push to main. If the merged PR added content under
+# [Unreleased] in CHANGELOG.md and is not labelled `no-release`, this
+# workflow:
+#   1. Bumps the version in pyproject.toml.
+#   2. Rewrites the [Unreleased] heading to ## [X.Y.Z] - YYYY-MM-DD and
+#      inserts a fresh empty [Unreleased] above the history marker.
+#   3. Pushes a new commit (not an amend) carrying both edits.
+#   4. Creates and pushes a `vX.Y.Z` tag.
+#   5. Creates a GitHub release with the extracted notes.
+#   6. Triggers publish.yml via workflow_dispatch to ship to PyPI
+#      (workflows triggered by GITHUB_TOKEN do not cascade, hence the
+#      explicit dispatch).
+#
+# Uses the default GITHUB_TOKEN. If branch protection is enabled on
+# `main`, swap the token for a fine-grained PAT with contents:write.
+#
+# All ${{ }} expressions are surfaced through env: vars before being
+# read in run: blocks (or process.env in github-script) so untrusted
+# changelog content can't break out of the shell or JS context.
+
+on:
+  push:
+    branches:
+      - main
+
+# Serialise runs so two close pushes to main can't race on tag/release
+# creation (both would compute the same next_version). Queue rather
+# than cancel so no merge to main loses its release.
+concurrency:
+  group: auto-release-main
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: read
+  actions: write
+
+jobs:
+  auto-tag:
+    name: Auto Tag Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for no-release label
+        id: skip
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sha = context.sha;
+            let shouldSkip = false;
+
+            try {
+              const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: sha
+              });
+
+              if (prs && prs.length > 0) {
+                shouldSkip = prs.some(pr =>
+                  pr.labels && pr.labels.some(label => label.name === 'no-release')
+                );
+              }
+            } catch (error) {
+              core.warning(`Could not check PR labels: ${error.message}`);
+            }
+
+            core.setOutput('should_skip', shouldSkip ? 'true' : 'false');
+
+      - name: Check changelog and calculate version
+        id: check
+        run: bash .github/scripts/changelog-version.sh
+
+      - name: Update changelog
+        if:
+          steps.check.outputs.should_release == 'true' &&
+          steps.skip.outputs.should_skip != 'true'
+        env:
+          NEW_VERSION: ${{ steps.check.outputs.next_version }}
+        run: |
+          VERSION_NO_V="${NEW_VERSION#v}"
+          TODAY=$(date +%Y-%m-%d)
+          # Fail fast if a section for this version already exists.
+          # Avoids producing a duplicate ## [X.Y.Z] heading when state
+          # has drifted (e.g. pyproject.toml was bumped manually but no
+          # tag was pushed, leaving an orphan versioned heading).
+          if grep -qE "^## \[$VERSION_NO_V\]( |$)" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md already has a ## [$VERSION_NO_V] section. Resolve the version drift (tag the existing release or bump differently) before re-running."
+            exit 1
+          fi
+          perl -0pi -e "s/^## \[Unreleased[^\]]*\]\n(.*?)\n## Full changelog history$/## [Unreleased]\n\n_Add unreleased changes here._\n\n## Full changelog history\n\n## [$VERSION_NO_V] - $TODAY\n\$1/mgs" CHANGELOG.md
+          echo "Updated CHANGELOG.md with version $VERSION_NO_V"
+
+      - name: Update pyproject.toml version
+        if:
+          steps.check.outputs.should_release == 'true' &&
+          steps.skip.outputs.should_skip != 'true'
+        env:
+          NEW_VERSION: ${{ steps.check.outputs.next_version }}
+        run: |
+          export VERSION_NO_V="${NEW_VERSION#v}"
+          perl -i -pe 'BEGIN{$v=$ENV{VERSION_NO_V}; $done=0} if(!$done && /^version\s*=/){s/"[^"]*"/"$v"/; $done=1}' pyproject.toml
+          grep -E '^version\s*=' pyproject.toml
+
+      - name: Set up Node
+        if:
+          steps.check.outputs.should_release == 'true' &&
+          steps.skip.outputs.should_skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Format changelog
+        if:
+          steps.check.outputs.should_release == 'true' &&
+          steps.skip.outputs.should_skip != 'true'
+        run: npx --yes prettier@4.0.0-alpha.8 --write CHANGELOG.md
+
+      - name: Commit version bump
+        if:
+          steps.check.outputs.should_release == 'true' &&
+          steps.skip.outputs.should_skip != 'true'
+        env:
+          NEW_VERSION: ${{ steps.check.outputs.next_version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md pyproject.toml
+          git commit -m "Cut $NEW_VERSION release"
+          git push origin main
+
+      - name: Create and push tag
+        if:
+          steps.check.outputs.should_release == 'true' &&
+          steps.skip.outputs.should_skip != 'true'
+        env:
+          NEW_VERSION: ${{ steps.check.outputs.next_version }}
+        run: |
+          git tag -a "$NEW_VERSION" -m "Release $NEW_VERSION"
+          git push origin "$NEW_VERSION"
+
+      - name: Extract changelog content
+        if:
+          steps.check.outputs.should_release == 'true' &&
+          steps.skip.outputs.should_skip != 'true'
+        id: changelog
+        env:
+          NEW_VERSION: ${{ steps.check.outputs.next_version }}
+          RUNNER_TEMP: ${{ runner.temp }}
+        run: |
+          VERSION_NO_V="${NEW_VERSION#v}"
+          awk "/^## \[$VERSION_NO_V\]/ {flag=1; next} /^## \[/ {flag=0} flag" CHANGELOG.md > "$RUNNER_TEMP/changelog_extract.md"
+          echo "Extracted changelog content for $VERSION_NO_V"
+
+      - name: Create GitHub Release
+        if:
+          steps.check.outputs.should_release == 'true' &&
+          steps.skip.outputs.should_skip != 'true'
+        uses: actions/github-script@v7
+        env:
+          NEW_VERSION: ${{ steps.check.outputs.next_version }}
+          RUNNER_TEMP: ${{ runner.temp }}
+        with:
+          script: |
+            const fs = require('fs');
+            const newVersion = process.env.NEW_VERSION;
+            const runnerTemp = process.env.RUNNER_TEMP;
+            const commitSha = context.sha;
+
+            let changelogContent = '';
+            try {
+              changelogContent = fs.readFileSync(`${runnerTemp}/changelog_extract.md`, 'utf8').trim();
+            } catch (err) {
+              core.warning(`Could not read changelog extract: ${err}`);
+            }
+
+            const releaseBody = changelogContent || `Automated release from ${commitSha}`;
+
+            await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: newVersion,
+              name: newVersion,
+              body: releaseBody,
+              draft: false,
+              prerelease: false
+            });
+
+      - name: Trigger PyPI publish
+        if:
+          steps.check.outputs.should_release == 'true' &&
+          steps.skip.outputs.should_skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_VERSION: ${{ steps.check.outputs.next_version }}
+        run: gh workflow run publish.yml --ref "$NEW_VERSION"
