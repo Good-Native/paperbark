@@ -100,6 +100,15 @@ def summarise_lines(
     the dispatcher rejects the conflict at config-load time.
     """
     if line_format is not None:
+        if format_keys is not None:
+            # Mirror the dispatcher's TOML-side conflict check at the API
+            # boundary — direct callers (tests, ad-hoc tooling) shouldn't
+            # be able to silently drop ``format_keys`` by also passing a
+            # ``line_format``. The two knobs target different parsers.
+            raise ValueError(
+                "summarise_lines: 'format_keys' is JSON-only and cannot be"
+                " combined with 'line_format'"
+            )
         return _summarise_with_format(
             lines,
             source=source,
@@ -322,9 +331,19 @@ def _format_record_parsed(record: Any) -> bool:
     ``Format.parse`` always returns a record; for regex formats a
     non-matching line yields all-empty fields (``RegexFormat._empty``).
     Treating that as ``failed_to_parse`` keeps the meta-counts honest
-    instead of inflating the parsed count with empty rows.
+    instead of inflating the parsed count with empty rows. We check
+    every canonical field — including ``status`` and ``duration_ms`` —
+    so a format whose only contribution is, say, an HTTP status code
+    still counts as a parse rather than a failure.
     """
-    return bool(record.timestamp or record.level or record.message or record.component)
+    return bool(
+        record.timestamp
+        or record.level
+        or record.message
+        or record.component
+        or record.status
+        or record.duration_ms is not None
+    )
 
 
 def _format_minute_key(timestamp: str) -> str:

@@ -236,13 +236,15 @@ groups straight into the canonical record so probes downstream see
 the same shape regardless of the source format.
 
 Note: `paperbark`'s mandatory cursor filter keys on a leading ISO
-timestamp for cross-iteration dedup. Apache combined / nginx default
-lines have no leading ISO timestamp, so they only flow end-to-end
-through sources that don't rely on overlap dedup (the planned
-`file` / `kubectl` / `cloudwatch` sources). Setting
-`format = "apache-combined"` on a `flyctl` source today is harmless
-but the cursor filter will drop the lines before they reach the
-parser; see [`docs/SOURCES.md`](SOURCES.md) for the matrix.
+timestamp for cross-iteration dedup. None of the bundled regex
+presets — `apache-combined`, `nginx-default`, `syslog-rfc5424` —
+emit a leading ISO timestamp (Apache/nginx put the timestamp inside
+brackets later in the line; RFC 5424 leads with `<PRI>1`), so they
+only flow end-to-end through sources that don't rely on overlap dedup
+(the planned `file` / `kubectl` / `cloudwatch` sources). Setting
+`format = "<preset>"` on a `flyctl` source today is harmless but the
+cursor filter will drop the lines before they reach the parser; see
+[`docs/SOURCES.md`](SOURCES.md) for the matrix.
 
 #### `wrangler`, `kubectl`, `cloudwatch`, `file`, `stdin`
 

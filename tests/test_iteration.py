@@ -207,6 +207,43 @@ def test_summarise_lines_syslog_format_derives_level_from_priority() -> None:
     assert summary["level_counts"]["2026-05-03T02:00"] == {"error": 1}
 
 
+def test_summarise_lines_rejects_format_keys_combined_with_line_format() -> None:
+    """The dispatcher catches this at config-load time, but the API
+    boundary needs the same guard — direct callers (tests, ad-hoc
+    tooling) shouldn't be able to silently drop ``format_keys`` by
+    also passing a ``line_format``.
+    """
+    import pytest
+
+    with pytest.raises(ValueError, match="JSON-only"):
+        summarise_lines(
+            ["irrelevant\n"],
+            format_keys={"timestamp": ("ts",)},
+            line_format=apache_combined(),
+        )
+
+
+def test_summarise_lines_format_counts_status_only_record_as_parsed() -> None:
+    """A format whose only contribution is, say, an HTTP status code
+    must still count as parsed — otherwise downstream meta-counts treat
+    valid records as failures."""
+    import re
+
+    from paperbark.formats import RegexFormat
+
+    status_only = RegexFormat(
+        name="status-only",
+        pattern=re.compile(r"^(?P<status>\d{3})$"),
+    )
+    summary = summarise_lines(
+        ["200\n", "404\n", "noise\n"],
+        line_format=status_only,
+    )
+    assert summary["meta"]["total_lines"] == 3
+    assert summary["meta"]["parsed"] == 2
+    assert summary["meta"]["failed_to_parse"] == 1
+
+
 def test_summarise_log_file_threads_line_format(tmp_path: Path) -> None:
     raw = tmp_path / "access.log"
     raw.write_text(
