@@ -137,15 +137,14 @@ Notes:
 - The `since` advisory parameter is silently ignored — the source has
   no upstream query to forward it to, and cursor filtering bounds
   output regardless.
-- Cursor filtering still keys on a leading ISO-8601 timestamp.
+- Cursor filtering keys on a leading ISO-8601 timestamp by default.
   Log shapes that lead with a timestamp (Fly-style JSON-with-prefix,
-  syslog emitted with a leading TS) dedup correctly across iterations.
-  Shapes whose lines don't lead with an ISO timestamp (Apache combined,
-  nginx default, RFC 5424's `<PRI>1` prefix) are dropped by the cursor
-  filter, even on the first iteration. A format-aware cursor mode is
-  on the v0.2+ list; until then, run such files through
-  `paperbark analyse` / `paperbark search` after a one-shot capture
-  rather than relying on the long-running `paperbark monitor` loop.
+  syslog emitted with a leading TS) dedup correctly across iterations
+  out of the box. For non-leading-TS shapes (Apache combined, nginx
+  default, RFC 5424's `<PRI>1` prefix), set `format` to the matching
+  preset on the `[[sources]]` entry — the cursor filter then advances
+  from the timestamp the format extracts, so those shapes also flow
+  end-to-end through `paperbark monitor`.
 - Log rotation is the source's responsibility, not paperbark's. If the
   file is replaced (e.g. by `logrotate create`) between iterations the
   next `capture()` reads the new file from the start; the cursor filter

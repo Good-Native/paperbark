@@ -9,6 +9,14 @@ seen. Lines without a parseable leading timestamp (multi-line panic
 stack traces, for example) are kept iff the most recent timestamped
 header was kept; otherwise they are stale carry-over from a prior
 overlapping capture.
+
+Format-aware mode: when a :class:`paperbark.formats.Format` is supplied
+via ``line_format``, the cursor advances from whichever field the format
+extracts as ``timestamp`` instead of the leading ISO timestamp. This lets
+non-leading-TS shapes (Apache combined, nginx default, RFC 5424 syslog,
+custom regex) flow through the long-running monitor loop. Lines the
+format can't timestamp are dropped — regex shapes are line-oriented, so
+the leading-ISO path's "header / continuation" carry-over doesn't apply.
 """
 
 from __future__ import annotations
@@ -17,6 +25,10 @@ import re
 import sys
 from collections.abc import Callable, Iterable
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from paperbark.formats import Format
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 LEADING_TS_RE = re.compile(
@@ -41,13 +53,22 @@ def filter_stream(
     cursor: str,
     *,
     write: Callable[[str], object],
+    line_format: Format | None = None,
 ) -> str:
     """Stream-filter ``lines`` against ``cursor``, returning the new cursor.
 
     Each kept line is passed to ``write``. The new cursor is the maximum
     timestamp seen across the input (or the original cursor if nothing
     advanced it).
+
+    When ``line_format`` is supplied, the cursor advances using the
+    timestamp the format extracts rather than the leading ISO match.
+    Lines whose extracted timestamp is empty are dropped; the leading-ISO
+    "continuation" carry-over does not apply because the bundled regex
+    presets are line-oriented.
     """
+    if line_format is not None:
+        return _filter_stream_format(lines, cursor, write=write, line_format=line_format)
     new_max = cursor
     header_emitted = False
     for line in lines:
@@ -68,7 +89,41 @@ def filter_stream(
     return new_max
 
 
-def filter_lines(lines: Iterable[str], cursor: str) -> tuple[list[str], str]:
+def _filter_stream_format(
+    lines: Iterable[str],
+    cursor: str,
+    *,
+    write: Callable[[str], object],
+    line_format: Format,
+) -> str:
+    """Format-aware counterpart to :func:`filter_stream`.
+
+    Routes each line through ``line_format.parse`` and gates on the
+    canonical timestamp. The format layer already normalises offsets to
+    ``+00:00`` and emits ISO seconds, so direct lexicographic comparison
+    against ``cursor`` is well-defined provided each source's records
+    keep a consistent offset (cursors are per-source on disk).
+    """
+    new_max = cursor
+    for line in lines:
+        ts = line_format.parse(line).timestamp
+        if not ts:
+            continue
+        ts = _normalise(ts)
+        if cursor and ts <= cursor:
+            continue
+        write(line)
+        if ts > new_max:
+            new_max = ts
+    return new_max
+
+
+def filter_lines(
+    lines: Iterable[str],
+    cursor: str,
+    *,
+    line_format: Format | None = None,
+) -> tuple[list[str], str]:
     """Eager wrapper over :func:`filter_stream`.
 
     Returns the kept lines as a list alongside the new cursor. Convenient
@@ -76,7 +131,7 @@ def filter_lines(lines: Iterable[str], cursor: str) -> tuple[list[str], str]:
     :func:`filter_stream` with a file ``.write`` sink.
     """
     kept: list[str] = []
-    new_cursor = filter_stream(lines, cursor, write=kept.append)
+    new_cursor = filter_stream(lines, cursor, write=kept.append, line_format=line_format)
     return kept, new_cursor
 
 
