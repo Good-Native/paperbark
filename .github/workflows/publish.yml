@@ -3,6 +3,10 @@ name: publish
 on:
   push:
     tags: ["v*"]
+  # auto-release.yml dispatches this workflow at a specific tag ref
+  # because workflows triggered by GITHUB_TOKEN do not cascade. The
+  # version-match step still gates against pyproject.toml.
+  workflow_dispatch:
 
 permissions:
   contents: read
