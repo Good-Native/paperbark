@@ -75,10 +75,14 @@ if [ -n "${GITHUB_OUTPUT:-}" ]; then
   } >> "$GITHUB_OUTPUT"
 
   if [ "$SHOULD_RELEASE" = "true" ]; then
+    # Per-invocation delimiter so a literal "CHANGELOG_EOF" in the
+    # unreleased content can't terminate the heredoc early and corrupt
+    # GITHUB_OUTPUT parsing.
+    DELIM="ghadelim_$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
     {
-      echo "changelog_content<<CHANGELOG_EOF"
+      echo "changelog_content<<$DELIM"
       echo "$UNRELEASED_CONTENT"
-      echo "CHANGELOG_EOF"
+      echo "$DELIM"
     } >> "$GITHUB_OUTPUT"
   fi
 else

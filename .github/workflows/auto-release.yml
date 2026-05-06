@@ -90,7 +90,7 @@ jobs:
         env:
           NEW_VERSION: ${{ steps.check.outputs.next_version }}
         run: |
-          VERSION_NO_V="${NEW_VERSION#v}"
+          export VERSION_NO_V="${NEW_VERSION#v}"
           perl -i -pe 'BEGIN{$v=$ENV{VERSION_NO_V}; $done=0} if(!$done && /^version\s*=/){s/"[^"]*"/"$v"/; $done=1}' pyproject.toml
           grep -E '^version\s*=' pyproject.toml
 
