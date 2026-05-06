@@ -40,6 +40,21 @@ def _build_parser() -> argparse.ArgumentParser:
         action="version",
         version=f"paperbark {__version__}",
     )
+    parser.add_argument(
+        "--no-auto-update",
+        dest="auto_update",
+        action="store_false",
+        default=None,
+        help="Skip the PyPI version check and upgrade prompt for this run.",
+    )
+    parser.add_argument(
+        "-y",
+        "--yes",
+        dest="assume_yes",
+        action="store_true",
+        default=False,
+        help="Auto-accept the upgrade prompt without asking.",
+    )
 
     subparsers = parser.add_subparsers(dest="command", metavar="<command>")
 
@@ -270,6 +285,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     command = args.command or "monitor"
 
+    # Skip the PyPI check on `init` (first-run friendliness) and when the
+    # user opts out via flag. Other subcommands always pass through, so a
+    # routine `paperbark monitor` invocation gets the prompt at most once
+    # per ``check_interval_hours``.
+    if command != "init" and getattr(args, "auto_update", None) is not False:
+        _maybe_autoupdate(args)
+
     if command == "search":
         try:
             return _run_search(args)
@@ -295,6 +317,33 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     sys.stderr.write(f"paperbark {__version__}: '{command}' is not yet implemented.\n")
     return _NOT_IMPLEMENTED_EXIT
+
+
+def _maybe_autoupdate(args: argparse.Namespace) -> None:
+    """Run the PyPI version check ahead of the real subcommand.
+
+    The autoupdate config lives inside ``paperbark.toml``; if discovery or
+    parsing fails we silently fall back to defaults rather than blocking the
+    user's command. The actual subcommand still does its own strict load
+    afterwards, so a malformed config will surface there with a typed error.
+    """
+    from paperbark import autoupdate
+    from paperbark.config import AutoupdateConfig, ConfigError, load
+
+    config_arg = getattr(args, "config", None)
+    config_path = Path(config_arg) if config_arg else None
+    try:
+        cfg = load(config_path)
+        autoupdate_cfg = cfg.autoupdate
+    except (ConfigError, OSError):
+        autoupdate_cfg = AutoupdateConfig()
+
+    autoupdate.maybe_run(
+        enabled=autoupdate_cfg.enabled,
+        mode=autoupdate_cfg.mode,
+        check_interval_hours=autoupdate_cfg.check_interval_hours,
+        assume_yes=bool(getattr(args, "assume_yes", False)),
+    )
 
 
 def _load_config(args: argparse.Namespace) -> Config | int:

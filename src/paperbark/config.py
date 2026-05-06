@@ -61,6 +61,11 @@ Schema overview::
     name = "main"
     type = "flyctl"
     app = "fly-app-a"
+
+    [autoupdate]
+    enabled = true
+    mode = "prompt"             # "prompt" | "notify" | "auto" | "off"
+    check_interval_hours = 24
 """
 
 from __future__ import annotations
@@ -96,6 +101,10 @@ DEFAULT_ANALYSE_EVERY = 300
 DEFAULT_CLEANUP_DAYS = 1
 DEFAULT_CLEANUP_MODE = "zip"
 CLEANUP_MODES: tuple[str, ...] = ("zip", "delete")
+
+DEFAULT_AUTOUPDATE_CHECK_INTERVAL = 86_400  # 24h between PyPI lookups.
+DEFAULT_AUTOUPDATE_MODE = "prompt"
+AUTOUPDATE_MODES: tuple[str, ...] = ("prompt", "notify", "auto", "off")
 
 # `run_id` is interpolated into a filesystem path; the same character class as
 # the bash dispatcher so a hostile or careless value can't escape the
@@ -233,6 +242,24 @@ class MonitorConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class AutoupdateConfig:
+    """Settings for the PyPI version check + self-upgrade prompt.
+
+    ``mode`` selects between four behaviours when a newer release is
+    available: ``"prompt"`` asks the user (default; suppressed in non-TTY
+    contexts where it falls back to ``"notify"``), ``"notify"`` prints a
+    one-line notice, ``"auto"`` runs the upgrade without asking, and
+    ``"off"`` skips the network check entirely. ``check_interval_hours``
+    bounds how often we hit PyPI; results are cached under
+    ``~/.cache/paperbark/last_check.json``.
+    """
+
+    enabled: bool = True
+    mode: str = DEFAULT_AUTOUPDATE_MODE
+    check_interval_hours: int = 24
+
+
+@dataclass(frozen=True, slots=True)
 class Config:
     """Parsed paperbark configuration."""
 
@@ -242,6 +269,7 @@ class Config:
     monitor: MonitorConfig = field(default_factory=MonitorConfig)
     analyse: AnalyseConfig = field(default_factory=AnalyseConfig)
     search: SearchConfig = field(default_factory=SearchConfig)
+    autoupdate: AutoupdateConfig = field(default_factory=AutoupdateConfig)
 
     @classmethod
     def defaults(cls) -> Config:
@@ -310,6 +338,7 @@ def from_dict(raw: Mapping[str, Any]) -> Config:
         monitor=_parse_monitor(raw.get("monitor")),
         analyse=_parse_analyse(raw.get("analyse")),
         search=_parse_search(raw.get("search")),
+        autoupdate=_parse_autoupdate(raw.get("autoupdate")),
     )
 
 
@@ -499,6 +528,26 @@ def _parse_duration_field(value: Any, label: str, *, require_positive: bool) -> 
     if require_positive and seconds <= 0:
         raise ConfigError(f"{label} must be > 0")
     return seconds
+
+
+def _parse_autoupdate(raw: Any) -> AutoupdateConfig:
+    table = _expect_mapping(raw, "autoupdate")
+    enabled = _parse_bool_field(table.get("enabled", True), "[autoupdate].enabled")
+    mode_raw = table.get("mode", DEFAULT_AUTOUPDATE_MODE)
+    if not isinstance(mode_raw, str):
+        raise ConfigError(f"[autoupdate].mode must be a string, got {type(mode_raw).__name__}")
+    if mode_raw not in AUTOUPDATE_MODES:
+        joined = ", ".join(repr(m) for m in AUTOUPDATE_MODES)
+        raise ConfigError(f"[autoupdate].mode must be one of {joined}")
+    interval_raw = table.get("check_interval_hours", 24)
+    if isinstance(interval_raw, bool) or not isinstance(interval_raw, int):
+        raise ConfigError(
+            f"[autoupdate].check_interval_hours must be an integer, "
+            f"got {type(interval_raw).__name__}"
+        )
+    if interval_raw < 0:
+        raise ConfigError("[autoupdate].check_interval_hours must be >= 0")
+    return AutoupdateConfig(enabled=enabled, mode=mode_raw, check_interval_hours=interval_raw)
 
 
 def _parse_pattern_overrides(raw: Any) -> dict[str, tuple[PatternOverride, ...]]:
