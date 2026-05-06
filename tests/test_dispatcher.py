@@ -752,10 +752,9 @@ def test_capture_iteration_uses_source_line_format(tmp_path: Path) -> None:
     Plain-text lines that don't embed JSON would parse as ``failed_to_parse``
     under the default JSON path; with a regex format attached they should
     parse cleanly and bucket against the matched timestamp. The line shape
-    is leading-ISO so the cursor filter (which keys on leading timestamps)
-    still passes the line through; non-leading-TS shapes like Apache
-    combined need a source that bypasses cursor filtering and are
-    out of scope for this PR.
+    here is leading-ISO so either cursor mode passes the lines through;
+    see ``test_capture_iteration_apache_format_passes_cursor_filter`` for
+    the non-leading-TS case the format-aware cursor mode unblocks.
     """
     import re
 
@@ -783,6 +782,34 @@ def test_capture_iteration_uses_source_line_format(tmp_path: Path) -> None:
     assert "2026-05-03T02:00" in summary["level_counts"]
     assert "2026-05-03T02:01" in summary["level_counts"]
     assert summary["level_counts"]["2026-05-03T02:01"] == {"warn": 1}
+    raw_log.unlink()
+
+
+def test_capture_iteration_apache_format_passes_cursor_filter(tmp_path: Path) -> None:
+    """Apache combined lines have no leading ISO timestamp, so the default
+    cursor filter would drop every line. With ``apache-combined`` attached
+    as the source format the cursor advances from the bracketed timestamp
+    instead, and the lines flow through to the iteration summary.
+    """
+    from paperbark.formats import apache_combined
+
+    fixed = datetime(2026, 5, 3, 14, 30, 45, tzinfo=UTC)
+    apache_lines = [
+        '127.0.0.1 - - [10/Oct/2000:13:55:36 -0700] "GET /a HTTP/1.0" 200 12\n',
+        '127.0.0.1 - - [10/Oct/2000:13:55:38 -0700] "GET /b HTTP/1.0" 404 34\n',
+    ]
+    source = FlyctlSource(
+        app="example",
+        runner=lambda _cmd: iter(apache_lines),
+        line_format=apache_combined(),
+    )
+    app_dir = tmp_path / "app"
+    raw_log, summary_json = capture_iteration(source, app_dir, 1, now=fixed)
+    assert raw_log.read_text(encoding="utf-8") == "".join(apache_lines)
+    summary = json.loads(summary_json.read_text(encoding="utf-8"))
+    assert summary["meta"]["parsed"] == 2
+    cursor = (app_dir / ".cursor").read_text(encoding="utf-8")
+    assert cursor == "2000-10-10T13:55:38-07:00"
     raw_log.unlink()
 
 

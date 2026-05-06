@@ -235,16 +235,16 @@ to leaving `format` unset). The regex presets parse the matched
 groups straight into the canonical record so probes downstream see
 the same shape regardless of the source format.
 
-Note: `paperbark`'s mandatory cursor filter keys on a leading ISO
-timestamp for cross-iteration dedup. None of the bundled regex
-presets — `apache-combined`, `nginx-default`, `syslog-rfc5424` —
-emit a leading ISO timestamp (Apache/nginx put the timestamp inside
-brackets later in the line; RFC 5424 leads with `<PRI>1`), so they
-only flow end-to-end through sources that don't rely on overlap dedup
-(the planned `file` / `kubectl` / `cloudwatch` sources). Setting
-`format = "<preset>"` on a `flyctl` source today is harmless but the
-cursor filter will drop the lines before they reach the parser; see
-[`docs/SOURCES.md`](SOURCES.md) for the matrix.
+Note: `paperbark`'s mandatory cursor filter is format-aware. When
+`format` is set on a source, the cursor advances from the timestamp
+the format extracts rather than the leading ISO match, so the
+bundled regex presets — `apache-combined`, `nginx-default`,
+`syslog-rfc5424` — flow end-to-end through `paperbark monitor`
+even though Apache/nginx put the timestamp inside brackets later
+in the line and RFC 5424 leads with `<PRI>1`. Lines the format
+can't timestamp are dropped (no continuation carry-over for the
+line-oriented regex presets); see [`docs/SOURCES.md`](SOURCES.md)
+for the matrix.
 
 #### `file` options
 
@@ -266,13 +266,12 @@ type = "file"
 path = "/var/log/audit.log"
 ```
 
-Cursor filtering still keys on a leading ISO-8601 timestamp. Files
-whose lines don't lead with one (Apache combined, nginx default, RFC
-5424 syslog) are dropped by the cursor filter even on the first
-iteration; for those, capture once and run `paperbark analyse` /
-`paperbark search` over the captured run rather than driving them
-through `paperbark monitor`. Format-aware cursoring is on the v0.2+
-list.
+Cursor filtering keys on a leading ISO-8601 timestamp by default.
+For files whose lines don't lead with one (Apache combined, nginx
+default, RFC 5424 syslog), set `format` to the matching preset so
+the cursor filter advances from the format-extracted timestamp
+instead — the file then drives `paperbark monitor` end-to-end the
+same way a Fly source does.
 
 #### `wrangler`, `kubectl`, `cloudwatch`, `stdin`
 

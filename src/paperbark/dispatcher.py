@@ -381,21 +381,24 @@ def capture_iteration(
     if cursor_path.exists():
         cursor = cursor_path.read_text(encoding="utf-8").strip()
 
-    with raw_log.open("w", encoding="utf-8") as f:
-        new_cursor = filter_stream(source.capture(), cursor, write=f.write)
-
-    if new_cursor and new_cursor != cursor:
-        cursor_path.write_text(new_cursor, encoding="utf-8")
-
     # Sources may attach a ``format_keys`` mapping that overrides the JSON
     # key tuples ``iteration`` consults — useful when a Fly app emits
     # structured logs with non-default field names. ``line_format`` opts
     # the source onto the regex/format layer instead, for non-JSON shapes
     # (Apache combined, RFC 5424 syslog, …). Falling back to ``None`` for
     # both attributes preserves the v0.1 default-JSON behaviour for sources
-    # that don't carry them (the stub sources, for example).
+    # that don't carry them (the stub sources, for example). The cursor
+    # filter also consults ``line_format`` so non-leading-TS shapes can
+    # advance the cursor from the format-extracted timestamp.
     format_keys = getattr(source, "format_keys", None)
     line_format = getattr(source, "line_format", None)
+
+    with raw_log.open("w", encoding="utf-8") as f:
+        new_cursor = filter_stream(source.capture(), cursor, write=f.write, line_format=line_format)
+
+    if new_cursor and new_cursor != cursor:
+        cursor_path.write_text(new_cursor, encoding="utf-8")
+
     summary = summarise_log_file(
         raw_log,
         flat_csv_path=summary_csv,
