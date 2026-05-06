@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Add unreleased changes here._
+
+## Full changelog history
+
+## [0.1.5] - 2026-05-06
+
 ### Added
 
 - Changelog-driven release automation. PRs are gated by
@@ -22,8 +28,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   merges. Shared parsing/version logic lives in
   `.github/scripts/changelog-version.sh` so the gate and the release
   workflow agree on what counts as releasable.
-
-## Full changelog history
 
 ## [0.1.4] - 2026-05-06
 
