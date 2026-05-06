@@ -104,7 +104,13 @@ jobs:
             const nextVersion = process.env.NEXT_VERSION;
             const changelogContent = (process.env.CHANGELOG_CONTENT || '').trim();
 
+            // Hidden marker so the bot only edits its own comment (not
+            // any other bot whose body happens to mention "Release
+            // Preview").
+            const MARKER = '<!-- changelog-check-release-preview -->';
+
             const lines = [
+              MARKER,
               `# Release Preview`,
               ``,
               `**${releaseType}**: \`${currentVersion}\` → \`${nextVersion}\``,
@@ -122,7 +128,7 @@ jobs:
 
             const botComment = comments.find(comment =>
               comment.user.type === 'Bot' &&
-              comment.body.includes('Release Preview')
+              comment.body.includes(MARKER)
             );
 
             if (botComment) {
