@@ -7,8 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-05-06
+
 ### Added
 
+- `paperbark` now checks PyPI for a newer release at most once every 24
+  hours and prompts the user before upgrading. Default mode is `prompt`
+  (`Upgrade now? [Y/n]`); on accept, paperbark runs the right installer
+  for the environment (`pipx upgrade paperbark` for pipx-managed venvs,
+  `python -m pip install --upgrade paperbark` for plain venvs) and
+  re-execs into the new binary so the user's command runs against the
+  upgraded version. Declined releases are remembered until a newer one
+  appears. Cache lives at `~/.cache/paperbark/last_check.json`.
+  Configurable via the new `[autoupdate]` TOML section (`enabled`,
+  `mode = "prompt" | "notify" | "auto" | "off"`, `check_interval_hours`)
+  and the `--no-auto-update` / `-y` / `--yes` flags. Skipped on
+  non-TTY contexts (falls back to `notify`), editable installs,
+  system Python paths, and when `PAPERBARK_NO_AUTO_UPDATE=1` is set.
 - `[[sources]]` accepts a `format = "<preset>"` option that routes the
   iteration parser through the format layer instead of the default
   JSON-keys path. Presets: `json` (default, equivalent to leaving
@@ -21,6 +36,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   non-leading-TS shapes (Apache combined, nginx default) are only useful
   end-to-end with sources that don't rely on overlap dedup; see
   `docs/CONFIG.md` for the compatibility matrix.
+
+### Fixed
+
+- `__version__` now reads from installed package metadata via
+  `importlib.metadata`, removing the drift between the hard-coded
+  string in `src/paperbark/__init__.py` and `pyproject.toml`.
 
 ## [0.1.2] - 2026-05-06
 
