@@ -673,6 +673,112 @@ def test_build_source_flyctl_rejects_non_string_format_keys_value() -> None:
         build_source(spec)
 
 
+# --- v0.2: format = "<preset>" wiring -------------------------------------
+
+
+def test_build_source_flyctl_attaches_apache_combined_format() -> None:
+    """``format = "apache-combined"`` should resolve to a RegexFormat
+    instance attached as ``source.line_format`` so the dispatcher can
+    forward it to the iteration parser.
+    """
+    from paperbark.formats import RegexFormat
+
+    spec = SourceConfig(
+        name="main",
+        type="flyctl",
+        options={"app": "fly-a", "format": "apache-combined"},
+    )
+    source = build_source(spec)
+    assert isinstance(source, FlyctlSource)
+    assert isinstance(source.line_format, RegexFormat)
+    assert source.line_format.name == "apache-combined"
+
+
+def test_build_source_flyctl_format_json_is_explicit_default() -> None:
+    """``format = "json"`` is sugar for the default JSON-keys path; we
+    deliberately don't construct a JsonKeysFormat instance because the
+    iteration parser already runs that path when ``line_format`` is
+    ``None``. The TOML key is accepted for symmetry with the regex
+    presets so an operator can be explicit without changing behaviour.
+    """
+    spec = SourceConfig(
+        name="main",
+        type="flyctl",
+        options={"app": "fly-a", "format": "json"},
+    )
+    source = build_source(spec)
+    assert isinstance(source, FlyctlSource)
+    assert source.line_format is None
+
+
+def test_build_source_flyctl_rejects_unknown_format_preset() -> None:
+    spec = SourceConfig(
+        name="main",
+        type="flyctl",
+        options={"app": "fly-a", "format": "not-a-preset"},
+    )
+    with pytest.raises(DispatcherError, match="unknown format 'not-a-preset'"):
+        build_source(spec)
+
+
+def test_build_source_flyctl_rejects_format_with_format_keys() -> None:
+    """``format_keys`` only tunes the JSON path; combining it with a regex
+    preset is a config mistake the loader must catch — silently dropping
+    one or the other on the floor would surprise the operator.
+    """
+    spec = SourceConfig(
+        name="main",
+        type="flyctl",
+        options={
+            "app": "fly-a",
+            "format": "apache-combined",
+            "format_keys": {"timestamp": "ts"},
+        },
+    )
+    with pytest.raises(DispatcherError, match="'format_keys' is JSON-only"):
+        build_source(spec)
+
+
+def test_capture_iteration_uses_source_line_format(tmp_path: Path) -> None:
+    """The dispatcher reads ``source.line_format`` and threads it through.
+
+    Plain-text lines that don't embed JSON would parse as ``failed_to_parse``
+    under the default JSON path; with a regex format attached they should
+    parse cleanly and bucket against the matched timestamp. The line shape
+    is leading-ISO so the cursor filter (which keys on leading timestamps)
+    still passes the line through; non-leading-TS shapes like Apache
+    combined need a source that bypasses cursor filtering and are
+    out of scope for this PR.
+    """
+    import re
+
+    from paperbark.formats import RegexFormat
+
+    fixed = datetime(2026, 5, 3, 14, 30, 45, tzinfo=UTC)
+    plain_lines = [
+        "2026-05-03T02:00:01Z INFO api: hello\n",
+        "2026-05-03T02:01:02Z WARN worker: slow\n",
+    ]
+    plain_format = RegexFormat(
+        name="test-plain",
+        pattern=re.compile(
+            r"^(?P<timestamp>\S+)\s+(?P<level>\S+)\s+(?P<component>\S+):\s+(?P<message>.*)$"
+        ),
+    )
+    source = FlyctlSource(
+        app="example",
+        runner=lambda _cmd: iter(plain_lines),
+        line_format=plain_format,
+    )
+    raw_log, summary_json = capture_iteration(source, tmp_path / "app", 1, now=fixed)
+    summary = json.loads(summary_json.read_text(encoding="utf-8"))
+    assert summary["meta"]["parsed"] == 2
+    assert "2026-05-03T02:00" in summary["level_counts"]
+    assert "2026-05-03T02:01" in summary["level_counts"]
+    assert summary["level_counts"]["2026-05-03T02:01"] == {"warn": 1}
+    raw_log.unlink()
+
+
 def test_capture_iteration_uses_source_format_keys(tmp_path: Path) -> None:
     """The dispatcher reads ``source.format_keys`` and threads it through.
 

@@ -187,12 +187,13 @@ type-specific option and forwarded to the source constructor.
 
 #### `flyctl` options
 
-| Key           | Type    | Default | Description                                                                                                                                           |
-| ------------- | ------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app`         | string  | —       | Required Fly.io app name.                                                                                                                             |
-| `no_tail`     | boolean | `true`  | Run `flyctl logs --no-tail` (one-shot capture; cursor filter handles overlap). The streaming form is intentionally unsupported in v1.                 |
-| `samples`     | integer | `400`   | Per-iteration capture window size (`-n` on flyctl). Mirrors `reference/logs.sh`'s `--samples` default; lift on busy apps to avoid dropped lines.      |
-| `format_keys` | table   | none    | JSON key overrides for the iteration parser. Each value is a string or list of strings; allowed fields: `timestamp`, `level`, `message`, `component`. |
+| Key           | Type    | Default  | Description                                                                                                                                                                                                               |
+| ------------- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app`         | string  | —        | Required Fly.io app name.                                                                                                                                                                                                 |
+| `no_tail`     | boolean | `true`   | Run `flyctl logs --no-tail` (one-shot capture; cursor filter handles overlap). The streaming form is intentionally unsupported in v1.                                                                                     |
+| `samples`     | integer | `400`    | Per-iteration capture window size (`-n` on flyctl). Mirrors `reference/logs.sh`'s `--samples` default; lift on busy apps to avoid dropped lines.                                                                          |
+| `format`      | string  | `"json"` | Named-group regex preset for non-JSON payloads. One of: `json` (default, JSON-keys parser), `apache-combined`, `nginx-default`, `syslog-rfc5424`.                                                                         |
+| `format_keys` | table   | none     | JSON key overrides for the iteration parser. Each value is a string or list of strings; allowed fields: `timestamp`, `level`, `message`, `component`. JSON-only — combining with a non-`json` `format` is a config error. |
 
 ##### `format_keys` example
 
@@ -214,9 +215,36 @@ component = "service"
 
 Unspecified fields keep their defaults (`time`/`timestamp`/…, `level`,
 `msg`/`message`, `component`). Unknown field names are rejected so a
-typo can't silently disable detection. Only JSON-keyed lines benefit
-from `format_keys` — non-JSON shapes (plain text, regex-matched
-formats) are tracked for v0.2.
+typo can't silently disable detection.
+
+##### `format` preset example
+
+For a source whose lines match the Apache combined / nginx default
+shape:
+
+```toml
+[[sources]]
+name = "edge"
+type = "flyctl"
+app = "fly-edge"
+format = "apache-combined"
+```
+
+`format = "json"` is the default (and an explicit no-op equivalent
+to leaving `format` unset). The regex presets parse the matched
+groups straight into the canonical record so probes downstream see
+the same shape regardless of the source format.
+
+Note: `paperbark`'s mandatory cursor filter keys on a leading ISO
+timestamp for cross-iteration dedup. None of the bundled regex
+presets — `apache-combined`, `nginx-default`, `syslog-rfc5424` —
+emit a leading ISO timestamp (Apache/nginx put the timestamp inside
+brackets later in the line; RFC 5424 leads with `<PRI>1`), so they
+only flow end-to-end through sources that don't rely on overlap dedup
+(the planned `file` / `kubectl` / `cloudwatch` sources). Setting
+`format = "<preset>"` on a `flyctl` source today is harmless but the
+cursor filter will drop the lines before they reach the parser; see
+[`docs/SOURCES.md`](SOURCES.md) for the matrix.
 
 #### `wrangler`, `kubectl`, `cloudwatch`, `file`, `stdin`
 

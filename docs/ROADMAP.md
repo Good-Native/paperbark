@@ -7,7 +7,7 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 
 - **Last verified:** 2026-05-05
 - **Latest commit on `main`:** `Restore bash-parity regressions and review
-  fixes` (`11d3dff`). v0.1.1 cut on `release/v0.1.1` lifts the merged
+fixes` (`11d3dff`). v0.1.1 cut on `release/v0.1.1` lifts the merged
   PR #15 work: per-iter `<TS>_iter<N>.csv` side-output, the
   `<TS>_iter<N>` filename pattern, in-process `samples` line-cap
   (mirroring the bash dispatcher's `| tail -n N` pipe), automatic
@@ -213,14 +213,17 @@ Carry these into the Python port:
 
 ## v0.2 shortlist
 
-- **Wire regex-format presets into iteration.** The format layer already
-  ships `JsonKeysFormat` (default, used today), `RegexFormat`, and three
-  presets (`apache-combined`, `nginx-default`, `syslog-rfc5424`), but
-  only the JSON path is reachable from `[[sources]]`. v0.2 adds a
-  `format = "<preset>"` (or inline `RegexFormat` definition) on each
-  `[[sources]]` entry so non-JSON payloads (pipe-delimited, syslog,
-  Apache, nginx, custom shapes via named-group regex) parse correctly.
-  Until then, non-JSON sources trip the format-mismatch warning.
+- ~~**Wire regex-format presets into iteration.**~~ Done (Unreleased).
+  `[[sources]]` accepts `format = "<preset>"` for `json` /
+  `apache-combined` / `nginx-default` / `syslog-rfc5424`, and the
+  iteration parser routes through the format layer when set. Custom
+  inline `RegexFormat` definitions remain a v0.2+ follow-up; for now
+  operators with bespoke shapes can either contribute a preset or use
+  the JSON path with `format_keys`. The mandatory cursor filter still
+  keys on a leading ISO timestamp, so non-leading-TS shapes (Apache
+  combined, nginx default) need a source that bypasses overlap dedup
+  to flow end-to-end — practical once the `file` / `kubectl` /
+  `cloudwatch` sources land.
 - Real implementations for the five stub sources (`wrangler`,
   `kubectl`, `cloudwatch`, `file`, `stdin`).
 - Per-source probe overrides (today probe toggles and

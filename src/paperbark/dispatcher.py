@@ -42,6 +42,7 @@ from pathlib import Path
 from paperbark.aggregate import aggregate
 from paperbark.config import Config, MonitorConfig, SourceConfig
 from paperbark.cursor import filter_stream
+from paperbark.formats import Format, registered_formats
 from paperbark.iteration import summarise_log_file
 from paperbark.sources import (
     CloudWatchSource,
@@ -87,6 +88,35 @@ class DispatcherError(ValueError):
 
 
 _FORMAT_KEY_FIELDS: frozenset[str] = frozenset({"timestamp", "level", "message", "component"})
+
+_JSON_FORMAT_NAME = "json"
+
+
+def _resolve_format(raw: object, source_name: str) -> Format | None:
+    """Look up a ``[[sources]].format`` preset name in the format registry.
+
+    Returns ``None`` when the operator didn't supply ``format`` or supplied
+    the explicit ``"json"`` sentinel (the default JSON-keys path is what the
+    iteration parser already runs when no format is attached, so we don't
+    need to attach an instance for it). Any other name must resolve against
+    :func:`paperbark.formats.registered_formats` or we raise so a typo
+    fails closed instead of silently dropping back to JSON.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or not raw:
+        raise DispatcherError(
+            f"source {source_name!r}: 'format' must be a non-empty string, got {type(raw).__name__}"
+        )
+    if raw == _JSON_FORMAT_NAME:
+        return None
+    registry = registered_formats()
+    if raw not in registry:
+        joined = ", ".join(sorted(registry))
+        raise DispatcherError(
+            f"source {source_name!r}: unknown format {raw!r}; known presets: {joined}"
+        )
+    return registry[raw]
 
 
 def _parse_format_keys(raw: object, source_name: str) -> dict[str, tuple[str, ...]] | None:
@@ -159,7 +189,9 @@ def build_source(spec: SourceConfig) -> Source:
     so ``paperbark init`` / config validation can still resolve them.
     """
     if spec.type == "flyctl":
-        _reject_unknown_options(spec, frozenset({"app", "no_tail", "samples", "format_keys"}))
+        _reject_unknown_options(
+            spec, frozenset({"app", "no_tail", "samples", "format", "format_keys"})
+        )
         app = spec.options.get("app")
         if not isinstance(app, str) or not app:
             raise DispatcherError(f"source {spec.name!r}: 'app' is required for flyctl")
@@ -174,8 +206,23 @@ def build_source(spec: SourceConfig) -> Source:
             )
         if samples_raw <= 0:
             raise DispatcherError(f"source {spec.name!r}: 'samples' must be > 0, got {samples_raw}")
+        line_format = _resolve_format(spec.options.get("format"), spec.name)
         format_keys = _parse_format_keys(spec.options.get("format_keys"), spec.name)
-        return FlyctlSource(app=app, no_tail=no_tail, samples=samples_raw, format_keys=format_keys)
+        if line_format is not None and format_keys is not None:
+            # The two knobs target different parsers — ``format_keys`` tunes
+            # the JSON path, regex presets ignore it. Failing closed beats
+            # silently dropping the operator's intent on the floor.
+            raise DispatcherError(
+                f"source {spec.name!r}: 'format_keys' is JSON-only and cannot be"
+                f" combined with format = {spec.options.get('format')!r}"
+            )
+        return FlyctlSource(
+            app=app,
+            no_tail=no_tail,
+            samples=samples_raw,
+            format_keys=format_keys,
+            line_format=line_format,
+        )
     if spec.type == "wrangler":
         _reject_unknown_options(spec, frozenset())
         return WranglerSource()
@@ -321,11 +368,19 @@ def capture_iteration(
 
     # Sources may attach a ``format_keys`` mapping that overrides the JSON
     # key tuples ``iteration`` consults — useful when a Fly app emits
-    # structured logs with non-default field names. Falling back to the
-    # iteration module's defaults preserves the v0.1 behaviour for sources
-    # that don't carry the attribute (the stub sources, for example).
+    # structured logs with non-default field names. ``line_format`` opts
+    # the source onto the regex/format layer instead, for non-JSON shapes
+    # (Apache combined, RFC 5424 syslog, …). Falling back to ``None`` for
+    # both attributes preserves the v0.1 default-JSON behaviour for sources
+    # that don't carry them (the stub sources, for example).
     format_keys = getattr(source, "format_keys", None)
-    summary = summarise_log_file(raw_log, flat_csv_path=summary_csv, format_keys=format_keys)
+    line_format = getattr(source, "line_format", None)
+    summary = summarise_log_file(
+        raw_log,
+        flat_csv_path=summary_csv,
+        format_keys=format_keys,
+        line_format=line_format,
+    )
     summary_json.write_text(
         json.dumps(summary, indent=2, sort_keys=True),
         encoding="utf-8",
