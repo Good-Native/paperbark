@@ -224,8 +224,15 @@ Carry these into the Python port:
   combined, nginx default) need a source that bypasses overlap dedup
   to flow end-to-end — practical once the `file` / `kubectl` /
   `cloudwatch` sources land.
-- Real implementations for the five stub sources (`wrangler`,
-  `kubectl`, `cloudwatch`, `file`, `stdin`).
+- Real implementations for the remaining four stub sources
+  (`wrangler`, `kubectl`, `cloudwatch`, `stdin`). The `file` source
+  landed Unreleased; cursor-filter compatibility for non-leading-TS
+  shapes is still a v0.2+ item (see format-aware cursor entry).
+- Format-aware cursor mode so non-leading-TS shapes (Apache combined,
+  nginx default, RFC 5424 syslog) can also flow through the long-running
+  monitor loop. Today the cursor filter requires a leading ISO
+  timestamp; with this in place, the cursor would be advanced from
+  whichever field the attached `Format` extracts as `timestamp`.
 - Per-source probe overrides (today probe toggles and
   `[probes.patterns]` are global).
 

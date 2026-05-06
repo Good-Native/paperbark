@@ -233,8 +233,29 @@ def build_source(spec: SourceConfig) -> Source:
         _reject_unknown_options(spec, frozenset())
         return CloudWatchSource()
     if spec.type == "file":
-        _reject_unknown_options(spec, frozenset())
-        return FileSource()
+        _reject_unknown_options(spec, frozenset({"path", "encoding", "format", "format_keys"}))
+        path = spec.options.get("path")
+        if not isinstance(path, str) or not path:
+            raise DispatcherError(f"source {spec.name!r}: 'path' is required for file")
+        encoding = spec.options.get("encoding", "utf-8")
+        if not isinstance(encoding, str) or not encoding:
+            raise DispatcherError(
+                f"source {spec.name!r}: 'encoding' must be a non-empty string,"
+                f" got {type(encoding).__name__}"
+            )
+        line_format = _resolve_format(spec.options.get("format"), spec.name)
+        format_keys = _parse_format_keys(spec.options.get("format_keys"), spec.name)
+        if line_format is not None and format_keys is not None:
+            raise DispatcherError(
+                f"source {spec.name!r}: 'format_keys' is JSON-only and cannot be"
+                f" combined with format = {spec.options.get('format')!r}"
+            )
+        return FileSource(
+            path=path,
+            encoding=encoding,
+            format_keys=format_keys,
+            line_format=line_format,
+        )
     if spec.type == "stdin":
         _reject_unknown_options(spec, frozenset())
         return StdinSource()

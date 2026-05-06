@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The `file` source is now a real implementation: it reads a single
+  text file from disk and yields its lines, with an optional
+  `encoding` knob (default `"utf-8"`, undecodable bytes replaced with
+  `U+FFFD`). Required option: `path`. Supports `format` /
+  `format_keys` with the same conflict rules as `flyctl`. Useful for
+  ingesting logs already pulled by another tool, for testing the
+  iteration → analyse pipeline without flyctl, and as a stepping
+  stone for the planned `kubectl` / `cloudwatch` / `wrangler`
+  implementations. Cursor filtering still keys on a leading ISO
+  timestamp, so files with non-leading-TS line shapes (Apache
+  combined, nginx default, RFC 5424 syslog) are best run through
+  one-shot capture + `paperbark analyse` rather than the long-running
+  `paperbark monitor` loop. See `docs/SOURCES.md` for the matrix.
+
 ## [0.1.3] - 2026-05-06
 
 ### Added
