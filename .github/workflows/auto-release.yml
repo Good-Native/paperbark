@@ -25,6 +25,13 @@ on:
     branches:
       - main
 
+# Serialise runs so two close pushes to main can't race on tag/release
+# creation (both would compute the same next_version). Queue rather
+# than cancel so no merge to main loses its release.
+concurrency:
+  group: auto-release-main
+  cancel-in-progress: false
+
 permissions:
   contents: write
   pull-requests: read
@@ -80,6 +87,14 @@ jobs:
         run: |
           VERSION_NO_V="${NEW_VERSION#v}"
           TODAY=$(date +%Y-%m-%d)
+          # Fail fast if a section for this version already exists.
+          # Avoids producing a duplicate ## [X.Y.Z] heading when state
+          # has drifted (e.g. pyproject.toml was bumped manually but no
+          # tag was pushed, leaving an orphan versioned heading).
+          if grep -qE "^## \[$VERSION_NO_V\]( |$)" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md already has a ## [$VERSION_NO_V] section. Resolve the version drift (tag the existing release or bump differently) before re-running."
+            exit 1
+          fi
           perl -0pi -e "s/^## \[Unreleased[^\]]*\]\n(.*?)\n## Full changelog history$/## [Unreleased]\n\n_Add unreleased changes here._\n\n## Full changelog history\n\n## [$VERSION_NO_V] - $TODAY\n\$1/mgs" CHANGELOG.md
           echo "Updated CHANGELOG.md with version $VERSION_NO_V"
 
