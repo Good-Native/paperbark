@@ -8,19 +8,24 @@ on:
   pull_request:
     branches:
       - main
-    paths-ignore:
-      - "**.md"
-      - "!CHANGELOG.md"
-      - "docs/**"
-      - "LICENSE"
-      - ".gitignore"
-      - "SECURITY.md"
+    # `paths` (not `paths-ignore`) so negation is supported. Run on
+    # every change, then exclude docs/license/markdown, then re-include
+    # CHANGELOG.md so a changelog-only PR still triggers the gate.
+    paths:
+      - "**"
+      - "!**/*.md"
+      - "!docs/**"
+      - "!LICENSE"
+      - "!.gitignore"
+      - "!SECURITY.md"
+      - "CHANGELOG.md"
 
 jobs:
   check-changelog:
     name: Validate Changelog Updated
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pull-requests: write
     steps:
       - name: Checkout code
