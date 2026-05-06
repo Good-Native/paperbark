@@ -24,6 +24,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the `--no-auto-update` / `-y` / `--yes` flags. Skipped on
   non-TTY contexts (falls back to `notify`), editable installs,
   system Python paths, and when `PAPERBARK_NO_AUTO_UPDATE=1` is set.
+- `[[sources]]` accepts a `format = "<preset>"` option that routes the
+  iteration parser through the format layer instead of the default
+  JSON-keys path. Presets: `json` (default, equivalent to leaving
+  `format` unset), `apache-combined`, `nginx-default`, `syslog-rfc5424`.
+  Non-JSON payloads (plain-text regex shapes, RFC 5424 syslog with
+  priority-derived levels, etc.) now parse cleanly without forking.
+  `format_keys` remains JSON-only and is rejected when combined with a
+  non-`json` `format` so the operator's intent isn't dropped silently.
+  The mandatory cursor filter still keys on a leading ISO timestamp, so
+  non-leading-TS shapes (Apache combined, nginx default) are only useful
+  end-to-end with sources that don't rely on overlap dedup; see
+  `docs/CONFIG.md` for the compatibility matrix.
 
 ### Fixed
 
