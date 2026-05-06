@@ -9,29 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- The cursor filter is now format-aware. When a source attaches a
-  `line_format` (via `[[sources]].format = "<preset>"` or a custom
-  `RegexFormat`), the cursor advances from the timestamp the format
-  extracts rather than the leading ISO timestamp on the line. This
-  unblocks Apache combined, nginx default, and RFC 5424 syslog shapes
-  end-to-end through the long-running `paperbark monitor` loop —
-  previously they parsed correctly but the cursor filter dropped every
-  line because none had a leading ISO timestamp. Lines the format
-  can't timestamp are dropped (the leading-ISO path's
-  "header / continuation" carry-over does not apply because the
-  bundled regex presets are line-oriented).
-- The `file` source is now a real implementation: it reads a single
-  text file from disk and yields its lines, with an optional
-  `encoding` knob (default `"utf-8"`, undecodable bytes replaced with
-  `U+FFFD`). Required option: `path`. Supports `format` /
-  `format_keys` with the same conflict rules as `flyctl`. Useful for
-  ingesting logs already pulled by another tool, for testing the
-  iteration → analyse pipeline without flyctl, and as a stepping
-  stone for the planned `kubectl` / `cloudwatch` / `wrangler`
-  implementations. With the format-aware cursor filter above, files
-  with non-leading-TS line shapes (Apache combined, nginx default,
-  RFC 5424 syslog) now also flow end-to-end through
-  `paperbark monitor`. See `docs/SOURCES.md` for the matrix.
 - Changelog-driven release automation. PRs are gated by
   `.github/workflows/changelog-check.yml`, which fails the run unless a
   PR adds a fresh entry under `## [Unreleased]` (or `[Unreleased:minor]`
@@ -77,6 +54,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   non-leading-TS shapes (Apache combined, nginx default) are only useful
   end-to-end with sources that don't rely on overlap dedup; see
   `docs/CONFIG.md` for the compatibility matrix.
+- The cursor filter is now format-aware. When a source attaches a
+  `line_format` (via `[[sources]].format = "<preset>"` or a custom
+  `RegexFormat`), the cursor advances from the timestamp the format
+  extracts rather than the leading ISO timestamp on the line. This
+  unblocks Apache combined, nginx default, and RFC 5424 syslog shapes
+  end-to-end through the long-running `paperbark monitor` loop —
+  previously they parsed correctly but the cursor filter dropped every
+  line because none had a leading ISO timestamp. Lines the format
+  can't timestamp are dropped (the leading-ISO path's
+  "header / continuation" carry-over does not apply because the
+  bundled regex presets are line-oriented).
+- The `file` source is now a real implementation: it reads a single
+  text file from disk and yields its lines, with an optional
+  `encoding` knob (default `"utf-8"`, undecodable bytes replaced with
+  `U+FFFD`). Required option: `path`. Supports `format` /
+  `format_keys` with the same conflict rules as `flyctl`. Useful for
+  ingesting logs already pulled by another tool, for testing the
+  iteration → analyse pipeline without flyctl, and as a stepping
+  stone for the planned `kubectl` / `cloudwatch` / `wrangler`
+  implementations. With the format-aware cursor filter above, files
+  with non-leading-TS line shapes (Apache combined, nginx default,
+  RFC 5424 syslog) now also flow end-to-end through
+  `paperbark monitor`. See `docs/SOURCES.md` for the matrix.
 
 ### Fixed
 
