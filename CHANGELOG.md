@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Add unreleased changes here._
+### Changed
+
+- Migrate GitHub Actions workflows to Blacksmith runners for faster CI
+  and colocated cache. Jobs that previously ran on
+  `ubuntu-latest`/`ubuntu-22.04` now use `blacksmith-4vcpu-ubuntu-2204`.
 
 ## Full changelog history
 
