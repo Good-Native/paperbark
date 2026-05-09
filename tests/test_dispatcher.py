@@ -77,7 +77,7 @@ def test_build_source_flyctl_rejects_unknown_option() -> None:
         build_source(spec)
 
 
-@pytest.mark.parametrize("type_", ["wrangler", "kubectl", "cloudwatch", "stdin"])
+@pytest.mark.parametrize("type_", ["wrangler", "kubectl", "cloudwatch"])
 def test_build_source_stub_rejects_unknown_option(type_: str) -> None:
     spec = SourceConfig(name="x", type=type_, options={"path": "/var/log/foo"})
     with pytest.raises(DispatcherError, match=r"unknown option\(s\) 'path'"):
@@ -90,7 +90,6 @@ def test_build_source_stub_rejects_unknown_option(type_: str) -> None:
         ("wrangler", WranglerSource),
         ("kubectl", KubectlSource),
         ("cloudwatch", CloudWatchSource),
-        ("stdin", StdinSource),
     ],
 )
 def test_build_source_returns_stub_classes(type_: str, expected_class: type[Source]) -> None:
@@ -1084,3 +1083,58 @@ def test_capture_iteration_with_file_source_processes_file_lines(tmp_path: Path)
     assert summary["meta"]["parsed"] == 2
     assert summary["warn_error_counts"] == {"worker: slow": 1}
     raw_log.unlink()
+
+
+# --- v0.2: real stdin source ----------------------------------------------
+
+
+def test_build_source_stdin_returns_stdin_instance() -> None:
+    spec = SourceConfig(name="x", type="stdin", options={})
+    source = build_source(spec)
+    assert isinstance(source, StdinSource)
+    assert source.line_format is None
+    assert source.format_keys is None
+
+
+def test_build_source_stdin_rejects_unknown_option() -> None:
+    spec = SourceConfig(name="x", type="stdin", options={"bogus": "x"})
+    with pytest.raises(DispatcherError, match=r"unknown option\(s\) 'bogus' for type 'stdin'"):
+        build_source(spec)
+
+
+def test_build_source_stdin_attaches_format_preset() -> None:
+    from paperbark.formats import RegexFormat
+
+    spec = SourceConfig(
+        name="x",
+        type="stdin",
+        options={"format": "apache-combined"},
+    )
+    source = build_source(spec)
+    assert isinstance(source, StdinSource)
+    assert isinstance(source.line_format, RegexFormat)
+    assert source.line_format.name == "apache-combined"
+
+
+def test_build_source_stdin_attaches_format_keys() -> None:
+    spec = SourceConfig(
+        name="x",
+        type="stdin",
+        options={"format_keys": {"timestamp": "ts"}},
+    )
+    source = build_source(spec)
+    assert isinstance(source, StdinSource)
+    assert source.format_keys == {"timestamp": ("ts",)}
+
+
+def test_build_source_stdin_rejects_format_with_format_keys() -> None:
+    spec = SourceConfig(
+        name="x",
+        type="stdin",
+        options={
+            "format": "apache-combined",
+            "format_keys": {"timestamp": "ts"},
+        },
+    )
+    with pytest.raises(DispatcherError, match="'format_keys' is JSON-only"):
+        build_source(spec)

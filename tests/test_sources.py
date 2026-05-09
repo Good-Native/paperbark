@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import io
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -87,7 +89,7 @@ def test_flyctl_requires_app_name() -> None:
 
 @pytest.mark.parametrize(
     "stub_class",
-    [WranglerSource, KubectlSource, CloudWatchSource, StdinSource],
+    [WranglerSource, KubectlSource, CloudWatchSource],
 )
 def test_stub_sources_raise_not_implemented_on_capture(
     stub_class: type[Source],
@@ -102,7 +104,6 @@ def test_stubs_are_protocol_compatible() -> None:
         WranglerSource,
         KubectlSource,
         CloudWatchSource,
-        StdinSource,
     ):
         instance = stub_class()
         assert isinstance(instance, Source)
@@ -152,3 +153,39 @@ def test_file_source_replaces_undecodable_bytes(tmp_path: Path) -> None:
     lines = list(source.capture())
     assert lines[0] == "good\n"
     assert "bad" in lines[1]
+
+
+# --- v0.2: real stdin source ----------------------------------------------
+
+
+def test_stdin_source_yields_lines_from_injected_stream() -> None:
+    source = StdinSource(stream=io.StringIO("alpha\nbravo\ncharlie\n"))
+    assert list(source.capture()) == ["alpha\n", "bravo\n", "charlie\n"]
+
+
+def test_stdin_source_satisfies_protocol() -> None:
+    source = StdinSource(stream=io.StringIO(""))
+    assert isinstance(source, Source)
+
+
+def test_stdin_source_yields_nothing_on_empty_stream() -> None:
+    source = StdinSource(stream=io.StringIO(""))
+    assert list(source.capture()) == []
+
+
+def test_stdin_source_uses_sys_stdin_when_no_stream_injected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("hello\nworld\n"))
+    source = StdinSource()
+    assert list(source.capture()) == ["hello\n", "world\n"]
+
+
+def test_stdin_source_second_capture_after_eof_yields_nothing() -> None:
+    """A piped stdin is a single-use stream. The first ``capture()`` drains
+    it; subsequent calls must not raise but yield nothing — long-running
+    monitor loops over a stdin pipe see one productive iteration followed
+    by empties."""
+    source = StdinSource(stream=io.StringIO("only-line\n"))
+    assert list(source.capture()) == ["only-line\n"]
+    assert list(source.capture()) == []

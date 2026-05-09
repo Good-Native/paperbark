@@ -19,7 +19,7 @@ Built-in sources sit alongside it under `src/paperbark/sources/`.
 | Kubernetes (`kubectl`)  | [`kubectl.py`](../src/paperbark/sources/kubectl.py)       | stub (raises on capture) |
 | AWS CloudWatch          | [`cloudwatch.py`](../src/paperbark/sources/cloudwatch.py) | stub (raises on capture) |
 | Plain files             | [`file.py`](../src/paperbark/sources/file.py)             | implemented              |
-| stdin                   | [`stdin.py`](../src/paperbark/sources/stdin.py)           | stub (raises on capture) |
+| stdin                   | [`stdin.py`](../src/paperbark/sources/stdin.py)           | implemented              |
 
 Stubs satisfy the `Source` Protocol so the config layer can resolve a
 `type = "wrangler"` (etc.) entry at parse time, but
@@ -150,9 +150,39 @@ Notes:
   next `capture()` reads the new file from the start; the cursor filter
   may still drop replays whose timestamps overlap the cursor.
 
-### Stubs (`wrangler`, `kubectl`, `cloudwatch`, `stdin`)
+### `stdin`
 
-These four are placeholders: `capture()` raises `NotImplementedError`.
+Reads lines from `sys.stdin` and yields them. Intended for piping
+pre-captured logs into a one-shot `paperbark monitor` / `analyse` /
+`search` run, e.g.:
+
+```
+cat app.log | paperbark monitor --iterations 1
+```
+
+| Option        | Type   | Default  | Description                                                                                                       |
+| ------------- | ------ | -------- | ----------------------------------------------------------------------------------------------------------------- |
+| `format`      | string | `"json"` | Same regex-preset selector as `flyctl`; see [`docs/CONFIG.md`](CONFIG.md#flyctl-options).                         |
+| `format_keys` | table  | none     | JSON-keys overrides; rejected when combined with a non-`json` `format`.                                           |
+
+Notes:
+
+- `since` is silently ignored — stdin has no upstream query to forward
+  it to, and cursor filtering bounds output regardless.
+- A piped stdin is a single-use stream owned by the parent process. The
+  first `capture()` drains it; subsequent calls yield nothing rather
+  than re-raising. Long-running monitor loops over a stdin pipe
+  therefore see one productive iteration followed by empty ones, which
+  matches the typical one-shot use.
+- There is intentionally no `encoding` knob in v0.2 — `sys.stdin` uses
+  whatever Python wired up at process start (`PYTHONIOENCODING` and the
+  system locale settle this). For byte-level robustness or a custom
+  encoding, prefer the `file` source — it owns the underlying handle
+  and applies `errors="replace"` safely.
+
+### Stubs (`wrangler`, `kubectl`, `cloudwatch`)
+
+These three are placeholders: `capture()` raises `NotImplementedError`.
 They exist so a config that names one of these `type`s validates and
 resolves at parse time, and so the registry and dispatcher round-trip
 tests cover the eventual real implementation paths.
@@ -165,8 +195,6 @@ The expected shape when these land:
   selectors. Will likely accept `since` natively.
 - **`cloudwatch`** uses the AWS SDK's `filter_log_events` against one
   log group per source. `since` maps to `startTime`.
-- **`stdin`** reads lines from `sys.stdin`. Intended for piping
-  pre-captured logs into `paperbark analyse` / `paperbark search`.
 
 ## Configuration
 

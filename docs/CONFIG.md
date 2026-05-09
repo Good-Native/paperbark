@@ -273,7 +273,33 @@ the cursor filter advances from the format-extracted timestamp
 instead — the file then drives `paperbark monitor` end-to-end the
 same way a Fly source does.
 
-#### `wrangler`, `kubectl`, `cloudwatch`, `stdin`
+#### `stdin` options
+
+Reads lines from `sys.stdin`. Intended for piping pre-captured logs
+into a one-shot `paperbark` run.
+
+| Key           | Type   | Default  | Description                                                                                                     |
+| ------------- | ------ | -------- | --------------------------------------------------------------------------------------------------------------- |
+| `format`      | string | `"json"` | Same regex-preset selector as `flyctl` — see the `flyctl` row above. The cursor-filter caveat applies here too. |
+| `format_keys` | table  | none     | JSON-keys overrides; rejected when combined with a non-`json` `format`.                                         |
+
+```toml
+[[sources]]
+name = "pipe"
+type = "stdin"
+```
+
+```
+cat my.log | paperbark analyse --run latest
+```
+
+A piped stdin is single-use: the first iteration drains it, subsequent
+iterations yield nothing. There is intentionally no `encoding` knob —
+`sys.stdin` uses Python's process-level encoding (`PYTHONIOENCODING` /
+locale). For byte-level robustness or a custom encoding, use the
+`file` source.
+
+#### `wrangler`, `kubectl`, `cloudwatch`
 
 Stubs in v1. They satisfy the `Source` Protocol so the config layer can
 name them, but `capture()` raises `NotImplementedError`. See

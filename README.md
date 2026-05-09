@@ -66,8 +66,8 @@ for the full schema reference.
 | Cloudflare Workers (`wrangler tail`) | stub (interface only, post-v1) |
 | Kubernetes (`kubectl logs`)          | stub (interface only, post-v1) |
 | AWS CloudWatch                       | stub (interface only, post-v1) |
-| Plain files                          | stub (interface only, post-v1) |
-| stdin                                | stub (interface only, post-v1) |
+| Plain files                          | implemented                    |
+| stdin                                | implemented                    |
 
 See [`docs/SOURCES.md`](docs/SOURCES.md) for the `Source` interface and
 how to add a new one.

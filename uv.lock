@@ -570,7 +570,7 @@ wheels = [
 
 [[package]]
 name = "paperbark"
-version = "0.1.3"
+version = "0.1.6"
 source = { editable = "." }
 dependencies = [
     { name = "rich" },
