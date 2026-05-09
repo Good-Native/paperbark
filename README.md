@@ -51,6 +51,17 @@ paperbark search --keyword "panic"
 paperbark analyse --run latest
 ```
 
+Or skip Fly entirely and pipe pre-captured logs through stdin:
+
+```sh
+# one-shot run over a piped log; same probes, same run-dir layout
+printf '[[sources]]\nname = "pipe"\ntype = "stdin"\n' > paperbark.toml
+cat app.log | paperbark monitor --iterations 1
+```
+
+The `file` source is the on-disk equivalent — set `type = "file"` and
+point `path` at the log file instead of piping.
+
 ## Configuration
 
 Paperbark reads `./paperbark.toml` first, then

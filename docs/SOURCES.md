@@ -156,7 +156,7 @@ Reads lines from `sys.stdin` and yields them. Intended for piping
 pre-captured logs into a one-shot `paperbark monitor` / `analyse` /
 `search` run, e.g.:
 
-```
+```sh
 cat app.log | paperbark monitor --iterations 1
 ```
 

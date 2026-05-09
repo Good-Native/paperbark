@@ -289,7 +289,7 @@ name = "pipe"
 type = "stdin"
 ```
 
-```
+```sh
 cat my.log | paperbark analyse --run latest
 ```
 
