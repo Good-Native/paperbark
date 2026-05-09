@@ -1,8 +1,11 @@
 """Standard-input log source.
 
 Reads lines from ``sys.stdin`` and yields them through the rest of the
-pipeline. The intended use is piping pre-captured logs into a one-shot
-``paperbark monitor`` / ``analyse`` / ``search`` run, e.g.::
+pipeline. Stdin capture only happens during a ``paperbark monitor``
+run — ``paperbark analyse`` and ``paperbark search`` operate on
+existing run artefacts and never consume stdin. The intended use is
+piping pre-captured logs into a one-shot ``paperbark monitor`` run,
+e.g.::
 
     cat app.log | paperbark monitor --iterations 1
 

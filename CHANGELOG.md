@@ -13,12 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lines from `sys.stdin` rather than raising `NotImplementedError`.
   Supports `format` / `format_keys` with the same conflict rules as
   `flyctl` and `file`. Intended for piping pre-captured logs into a
-  one-shot `paperbark monitor` / `analyse` / `search` run, e.g.
-  `cat app.log | paperbark monitor --iterations 1`. A piped stdin is
-  single-use: the first iteration drains it, subsequent iterations
-  yield nothing. There is intentionally no `encoding` knob — use the
-  `file` source if you need byte-level robustness or a custom
-  encoding. See `docs/SOURCES.md` and `docs/CONFIG.md` for the matrix.
+  one-shot `paperbark monitor` run, e.g. `cat app.log | paperbark
+monitor --iterations 1` (`analyse` and `search` read existing run
+  artefacts and never consume stdin). A piped stdin is single-use:
+  the first iteration drains it, subsequent iterations yield nothing.
+  There is intentionally no `encoding` knob — use the `file` source
+  if you need byte-level robustness or a custom encoding. See
+  `docs/SOURCES.md` and `docs/CONFIG.md` for the matrix.
 
 ## Full changelog history
 

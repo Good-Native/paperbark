@@ -152,9 +152,10 @@ Notes:
 
 ### `stdin`
 
-Reads lines from `sys.stdin` and yields them. Intended for piping
-pre-captured logs into a one-shot `paperbark monitor` / `analyse` /
-`search` run, e.g.:
+Reads lines from `sys.stdin` and yields them. Stdin capture happens
+during a `paperbark monitor` run only — `analyse` and `search` read
+existing run artefacts and never consume stdin. Intended for piping
+pre-captured logs into a one-shot `paperbark monitor` run, e.g.:
 
 ```sh
 cat app.log | paperbark monitor --iterations 1

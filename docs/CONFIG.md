@@ -275,8 +275,10 @@ same way a Fly source does.
 
 #### `stdin` options
 
-Reads lines from `sys.stdin`. Intended for piping pre-captured logs
-into a one-shot `paperbark` run.
+Reads lines from `sys.stdin` during a `paperbark monitor` capture
+(`analyse` and `search` operate on existing run artefacts, not on
+stdin). Intended for piping pre-captured logs into a one-shot
+`paperbark monitor` run.
 
 | Key           | Type   | Default  | Description                                                                                                     |
 | ------------- | ------ | -------- | --------------------------------------------------------------------------------------------------------------- |
@@ -290,7 +292,7 @@ type = "stdin"
 ```
 
 ```sh
-cat my.log | paperbark analyse --run latest
+cat my.log | paperbark monitor --iterations 1
 ```
 
 A piped stdin is single-use: the first iteration drains it, subsequent
