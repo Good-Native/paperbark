@@ -257,8 +257,15 @@ def build_source(spec: SourceConfig) -> Source:
             line_format=line_format,
         )
     if spec.type == "stdin":
-        _reject_unknown_options(spec, frozenset())
-        return StdinSource()
+        _reject_unknown_options(spec, frozenset({"format", "format_keys"}))
+        line_format = _resolve_format(spec.options.get("format"), spec.name)
+        format_keys = _parse_format_keys(spec.options.get("format_keys"), spec.name)
+        if line_format is not None and format_keys is not None:
+            raise DispatcherError(
+                f"source {spec.name!r}: 'format_keys' is JSON-only and cannot be"
+                f" combined with format = {spec.options.get('format')!r}"
+            )
+        return StdinSource(format_keys=format_keys, line_format=line_format)
     raise DispatcherError(f"source {spec.name!r}: unknown type {spec.type!r}")
 
 

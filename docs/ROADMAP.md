@@ -5,7 +5,7 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 
 ## Current state
 
-- **Last verified:** 2026-05-05
+- **Last verified:** 2026-05-10
 - **Latest commit on `main`:** `Restore bash-parity regressions and review
 fixes` (`11d3dff`). v0.1.1 cut on `release/v0.1.1` lifts the merged
   PR #15 work: per-iter `<TS>_iter<N>.csv` side-output, the
@@ -225,9 +225,12 @@ Carry these into the Python port:
   timestamp the format extracts instead of the leading ISO match,
   so non-leading-TS shapes (Apache combined, nginx default, RFC 5424
   syslog) flow end-to-end through the long-running monitor loop.
-- Real implementations for the remaining four stub sources
-  (`wrangler`, `kubectl`, `cloudwatch`, `stdin`). The `file` source
-  landed Unreleased.
+- ~~**Real `stdin` source.**~~ Done (Unreleased). `capture()` yields
+  from `sys.stdin` with `format` / `format_keys` support; intended for
+  one-shot pipes (`cat app.log | paperbark monitor --iterations 1`).
+- Real implementations for the remaining three stub sources
+  (`wrangler`, `kubectl`, `cloudwatch`). The `file` and `stdin`
+  sources landed Unreleased.
 - Per-source probe overrides (today probe toggles and
   `[probes.patterns]` are global).
 
