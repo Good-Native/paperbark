@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Add unreleased changes here._
+
+## Full changelog history
+
+## [0.1.7] - 2026-05-09
+
 ### Added
 
 - The `stdin` source is now a real implementation: `capture()` yields
@@ -20,8 +26,6 @@ monitor --iterations 1` (`analyse` and `search` read existing run
   There is intentionally no `encoding` knob — use the `file` source
   if you need byte-level robustness or a custom encoding. See
   `docs/SOURCES.md` and `docs/CONFIG.md` for the matrix.
-
-## Full changelog history
 
 ## [0.1.6] - 2026-05-07
 
