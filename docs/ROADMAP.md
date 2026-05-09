@@ -6,21 +6,19 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 ## Current state
 
 - **Last verified:** 2026-05-10
-- **Latest commit on `main`:** `Restore bash-parity regressions and review
-fixes` (`11d3dff`). v0.1.1 cut on `release/v0.1.1` lifts the merged
-  PR #15 work: per-iter `<TS>_iter<N>.csv` side-output, the
-  `<TS>_iter<N>` filename pattern, in-process `samples` line-cap
-  (mirroring the bash dispatcher's `| tail -n N` pipe), automatic
-  run-dir rotation (`zip` / `delete` modes), `[[sources]].format_keys`
-  for per-field JSON key overrides, a parse-rate hint in `monitor.log`
-  (the stderr warning was dropped post-v0.1.1 — too noisy on healthy
-  mixed-format sources), the
-  `External errors and timeouts` probe heading, and ANSI stripping in
-  `paperbark search` (with `--keep-ansi` / `[search].keep_ansi`).
+- **Latest release on `main`:** v0.1.7 (`Cut v0.1.7 release`,
+  `dbde19c`) — landed the real `stdin` source (PR #27,
+  `cat app.log | paperbark monitor --iterations 1`) on top of v0.1.6's
+  Blacksmith-runners CI migration and v0.1.5's changelog-driven release
+  automation. Remaining v0.2 stub work: real `wrangler`, `kubectl`,
+  and `cloudwatch` sources, and per-source probe overrides (today
+  probe toggles and `[probes.patterns]` are global).
 - **Repo:** <https://github.com/Good-Native/paperbark>
-- **Released:** v0.1.1 on 2026-05-05 (first registry-bound release;
-  PyPI publish wired via GitHub Actions trusted publishing on tag push).
-- **Tests:** 407 passing across 27 test modules; CI has been green on
+- **Releases:** v0.1.7 on 2026-05-09 (most recent). Each merge to
+  `main` with an `[Unreleased]` entry auto-cuts the next patch tag,
+  publishes to PyPI via trusted publishing, and creates the GitHub
+  Release.
+- **Tests:** 419 passing across 26 test modules; CI has been green on
   every push since the `Land uv.lock and unblock CI` change.
 
 ### Implementation status
