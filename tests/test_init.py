@@ -49,7 +49,12 @@ def test_cli_init_writes_to_default_path(
     assert "Wrote starter config" in captured.err
 
 
-def test_cli_init_honours_explicit_path(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_init_honours_explicit_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Detection scans CWD, so chdir into the empty tmp_path to make
+    # this test independent of where pytest was launched from.
+    monkeypatch.chdir(tmp_path)
     target = tmp_path / "custom.toml"
     rc = main(["init", "--path", str(target)])
     captured = capsys.readouterr()
@@ -58,7 +63,10 @@ def test_cli_init_honours_explicit_path(tmp_path: Path, capsys: pytest.CaptureFi
     assert str(target) in captured.err
 
 
-def test_cli_init_refuses_existing_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_init_refuses_existing_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
     target = tmp_path / "paperbark.toml"
     target.write_text("# existing content\n", encoding="utf-8")
     rc = main(["init", "--path", str(target)])
@@ -70,7 +78,10 @@ def test_cli_init_refuses_existing_file(tmp_path: Path, capsys: pytest.CaptureFi
     assert target.read_text(encoding="utf-8") == "# existing content\n"
 
 
-def test_cli_init_force_overwrites(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_init_force_overwrites(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
     target = tmp_path / "paperbark.toml"
     target.write_text("# existing content\n", encoding="utf-8")
     rc = main(["init", "--path", str(target), "--force"])
@@ -81,11 +92,12 @@ def test_cli_init_force_overwrites(tmp_path: Path, capsys: pytest.CaptureFixture
 
 
 def test_cli_init_unwritable_target_exits_2(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Writing into a path whose parent is a regular file raises OSError →
     exit 2 with a descriptive stderr message.
     """
+    monkeypatch.chdir(tmp_path)
     blocker = tmp_path / "blocker"
     blocker.write_text("not a directory\n", encoding="utf-8")
     target = blocker / "paperbark.toml"
@@ -93,3 +105,83 @@ def test_cli_init_unwritable_target_exits_2(
     err = capsys.readouterr().err
     assert rc == 2
     assert "Could not write" in err
+
+
+def test_cli_init_detects_fly_toml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "fly.toml").write_text(
+        'app = "scratch-app"\nprimary_region = "syd"\n',
+        encoding="utf-8",
+    )
+    rc = main(["init"])
+    err = capsys.readouterr().err
+    assert rc == 0
+    written = (tmp_path / "paperbark.toml").read_text(encoding="utf-8")
+    assert 'type = "flyctl"' in written
+    assert 'app = "scratch-app"' in written
+    # The bare placeholder block must not also be present, otherwise
+    # the user would see two competing source examples.
+    assert "# [[sources]]" not in written
+    assert "Detected source(s): flyctl (app=scratch-app)" in err
+    # Round-trip: the file must parse via the real config loader so a
+    # follow-up ``paperbark monitor`` can load it.
+    raw = tomllib.loads(written)
+    parsed = from_dict(raw)
+    assert len(parsed.sources) == 1
+    assert parsed.sources[0].type == "flyctl"
+    assert parsed.sources[0].options == {"app": "scratch-app"}
+
+
+def test_cli_init_detects_wrangler_toml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "wrangler.toml").write_text(
+        'name = "edge-worker"\naccount_id = "abc123"\n',
+        encoding="utf-8",
+    )
+    rc = main(["init"])
+    err = capsys.readouterr().err
+    assert rc == 0
+    written = (tmp_path / "paperbark.toml").read_text(encoding="utf-8")
+    assert 'type = "wrangler"' in written
+    assert 'worker = "edge-worker"' in written
+    assert 'account_id = "abc123"' in written
+    assert "Detected source(s): wrangler (worker=edge-worker)" in err
+    raw = tomllib.loads(written)
+    parsed = from_dict(raw)
+    assert len(parsed.sources) == 1
+    assert parsed.sources[0].type == "wrangler"
+    assert parsed.sources[0].options == {
+        "worker": "edge-worker",
+        "account_id": "abc123",
+    }
+
+
+def test_cli_init_detects_both_manifests(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "fly.toml").write_text('app = "fly-side"\n', encoding="utf-8")
+    (tmp_path / "wrangler.toml").write_text('name = "wrangler-side"\n', encoding="utf-8")
+    rc = main(["init"])
+    assert rc == 0
+    written = (tmp_path / "paperbark.toml").read_text(encoding="utf-8")
+    raw = tomllib.loads(written)
+    parsed = from_dict(raw)
+    types = sorted(s.type for s in parsed.sources)
+    assert types == ["flyctl", "wrangler"]
+    names = {s.name for s in parsed.sources}
+    assert names == {"fly", "wrangler"}
+
+
+def test_cli_init_no_detect_emits_bare_template(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``--no-detect`` opts out even when a manifest is present, so users
+    who want the commented-out example back can still get it."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "fly.toml").write_text('app = "should-be-ignored"\n', encoding="utf-8")
+    rc = main(["init", "--no-detect"])
+    assert rc == 0
+    assert (tmp_path / "paperbark.toml").read_text(encoding="utf-8") == STARTER_TOML

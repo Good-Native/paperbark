@@ -94,6 +94,11 @@ v1, so every supported source is visible from one switch.
 
 ## Built-in sources
 
+> **Tip:** `paperbark init` reads `fly.toml` and `wrangler.{toml,jsonc}`
+> from the current directory and pre-fills the matching `[[sources]]`
+> block automatically. See [`docs/CONFIG.md`](CONFIG.md#project-autodetection-on-init)
+> for the detection rules and how to opt out with `--no-detect`.
+
 ### `flyctl`
 
 Wraps `flyctl logs --no-tail` for one Fly.io app per `[[sources]]`
