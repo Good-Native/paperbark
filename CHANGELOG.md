@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Add unreleased changes here._
+
+## Full changelog history
+
+## [0.1.8] - 2026-05-10
+
 ### Added
 
 - The `wrangler` source is now a real implementation. Wraps
@@ -31,8 +37,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Subprocess lifecycle mirrors flyctl (`terminate()` →
   `wait(5s)` → `kill()`). See `docs/SOURCES.md` and
   `docs/CONFIG.md`.
-
-## Full changelog history
 
 ## [0.1.7] - 2026-05-09
 
