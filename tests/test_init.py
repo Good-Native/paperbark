@@ -169,10 +169,10 @@ def test_cli_init_detects_both_manifests(tmp_path: Path, monkeypatch: pytest.Mon
     written = (tmp_path / "paperbark.toml").read_text(encoding="utf-8")
     raw = tomllib.loads(written)
     parsed = from_dict(raw)
-    types = sorted(s.type for s in parsed.sources)
-    assert types == ["flyctl", "wrangler"]
-    names = {s.name for s in parsed.sources}
-    assert names == {"fly", "wrangler"}
+    # Order matters: paperbark.detect emits fly before wrangler so the
+    # generated TOML is byte-stable across runs.
+    assert [s.type for s in parsed.sources] == ["flyctl", "wrangler"]
+    assert [s.name for s in parsed.sources] == ["fly", "wrangler"]
 
 
 def test_cli_init_escapes_special_chars_in_detected_values(

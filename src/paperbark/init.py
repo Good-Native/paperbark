@@ -8,10 +8,11 @@ sources parses to :meth:`paperbark.config.Config.defaults`. Tests pin
 this contract.
 
 When the working directory contains a ``fly.toml`` or
-``wrangler.{toml,jsonc}``, the trailing commented-out ``[[sources]]``
-example is replaced with real, ready-to-run entries — see
-:mod:`paperbark.detect` for the rules. Pass ``--no-detect`` to skip
-detection and emit the bare template unchanged.
+``wrangler.{toml,jsonc,json}``, the trailing commented-out
+``[[sources]]`` example is replaced with real, ready-to-run entries
+— see :mod:`paperbark.detect` for the resolution order. Pass
+``--no-detect`` to skip detection and emit the bare template
+unchanged.
 """
 
 from __future__ import annotations
