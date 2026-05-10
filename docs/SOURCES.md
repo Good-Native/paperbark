@@ -22,7 +22,7 @@ Built-in sources sit alongside it under `src/paperbark/sources/`.
 | stdin                   | [`stdin.py`](../src/paperbark/sources/stdin.py)           | implemented              |
 
 Stubs satisfy the `Source` Protocol so the config layer can resolve a
-`type = "wrangler"` (etc.) entry at parse time, but
+`type = "kubectl"` (etc.) entry at parse time, but
 `capture()` raises `NotImplementedError` until a real implementation
 lands. This keeps `paperbark init` and the TOML loader honest — a typo
 in `type` fails fast — without forcing every adapter to ship in v1.

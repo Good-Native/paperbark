@@ -7,11 +7,11 @@ CloudWatch, plain files, stdin), runs a configurable set of probes over
 them, and writes a stable run-directory layout that downstream tooling can
 search across.
 
-> Status: v0.1.1 released to PyPI. The probe, format, source (flyctl),
-> iteration, aggregate, cursor-filter, search, dispatcher, and analyse
-> layers are all wired up; `paperbark monitor` runs end to end on a
-> configurable cadence with a `rich.live` ticker. See
-> [docs/ROADMAP.md](docs/ROADMAP.md) for current status.
+> Status: latest release on PyPI. The probe, format, source (flyctl,
+> file, stdin, wrangler), iteration, aggregate, cursor-filter, search,
+> dispatcher, and analyse layers are all wired up; `paperbark monitor`
+> runs end to end on a configurable cadence with a `rich.live` ticker.
+> See [docs/ROADMAP.md](docs/ROADMAP.md) for current status.
 
 ## Install
 

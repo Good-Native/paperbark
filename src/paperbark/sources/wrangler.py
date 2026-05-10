@@ -37,9 +37,12 @@ Each decoded event is decorated before it leaves the source:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import queue
 import subprocess
+import threading
 import time
 from collections import deque
 from collections.abc import Callable, Iterator
@@ -51,6 +54,20 @@ if TYPE_CHECKING:
 
 _WRANGLER_TIMEOUT = 5.0
 """Seconds to wait after ``terminate()`` before sending SIGKILL."""
+
+_QUEUE_POLL_INTERVAL = 0.5
+"""Maximum time the main loop blocks on the event queue between deadline
+checks. Bounds how long the iteration can overrun ``samples_window_seconds``
+when no event is in flight."""
+
+
+class WranglerProcessError(RuntimeError):
+    """Raised when ``wrangler tail`` exits with a non-zero status that we
+    didn't cause via ``terminate()`` — typically auth failures, unknown
+    Worker names, or required-account-id errors. Carries the captured
+    stderr so the operator sees the underlying CLI message rather than a
+    silent zero-line iteration."""
+
 
 DEFAULT_SAMPLES = 400
 """Per-iteration line cap. Mirrors ``FlyctlSource``'s default."""
@@ -105,9 +122,14 @@ def _default_runner(
     """Run ``command`` for ``window_seconds`` and yield parsed events.
 
     Spawns a child process with the given ``env`` overrides on top of
-    the parent environment, reads its stdout into a JSON object stream,
-    and stops yielding once the time window elapses. Cleans up on early
-    exit (terminate → wait 5 s → kill).
+    the parent environment, reads its stdout into a JSON object stream
+    on a background thread, and yields events from a queue. Bounding
+    the iteration on a queue (rather than on the parser's blocking
+    ``read``) means the wall-clock window fires even when the Worker
+    is idle and no event has arrived. Cleans up on early exit
+    (terminate → wait 5 s → kill) and surfaces non-zero wrangler
+    exits we didn't cause as :class:`WranglerProcessError` so auth /
+    account-selection failures don't masquerade as quiet iterations.
     """
     full_env = {**os.environ, **env}
     # Command is operator-configured and executed without a shell.
@@ -121,20 +143,70 @@ def _default_runner(
     )
     if process.stdout is None:
         raise RuntimeError("wrangler process started without a stdout pipe")
+
+    sentinel: object = object()
+    events_q: queue.Queue[dict[str, Any] | object] = queue.Queue()
+
+    def _reader() -> None:
+        # The reader runs the brace-balanced JSON stream in its own thread
+        # so the main loop can poll the queue with a timeout and honour
+        # ``window_seconds`` regardless of whether stdout has anything.
+        try:
+            assert process.stdout is not None
+            for event in _stream_json_objects(process.stdout):
+                events_q.put(event)
+        finally:
+            events_q.put(sentinel)
+
+    reader = threading.Thread(target=_reader, daemon=True)
+    reader.start()
+
     deadline = time.monotonic() + window_seconds
+    we_terminated = False
     try:
-        for event in _stream_json_objects(process.stdout):
-            yield event
-            if time.monotonic() >= deadline:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 break
+            try:
+                # Cap the per-iteration wait so we re-check ``deadline``
+                # promptly even on otherwise-quiet streams.
+                item = events_q.get(timeout=min(remaining, _QUEUE_POLL_INTERVAL))
+            except queue.Empty:
+                continue
+            if item is sentinel:
+                # Reader saw EOF on stdout — wrangler exited on its own
+                # (auth failure, account-id missing, network drop, etc.)
+                # or stdout was closed underneath us. Stop iterating; the
+                # post-cleanup check below decides whether to raise.
+                break
+            assert isinstance(item, dict)
+            yield item
     finally:
         if process.poll() is None:
+            we_terminated = True
             process.terminate()
             try:
                 process.wait(timeout=_WRANGLER_TIMEOUT)
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
+        # Once stdout closes (process gone) the reader thread unwinds; bound
+        # the join so a stuck reader can't hang the iteration.
+        reader.join(timeout=_WRANGLER_TIMEOUT)
+
+    # Surface non-zero exits we didn't cause via terminate(). On Unix a
+    # natural wrangler exit returns a small positive code; ``terminate()``
+    # produces a negative ``returncode`` (-15 / -SIGTERM) which we filter
+    # out via ``we_terminated``.
+    if not we_terminated and process.returncode not in (None, 0):
+        stderr_text = ""
+        if process.stderr is not None:
+            with contextlib.suppress(OSError):
+                stderr_text = process.stderr.read()
+        raise WranglerProcessError(
+            f"wrangler exited with code {process.returncode}: {stderr_text.strip()}"
+        )
 
 
 def _event_to_line(event: dict[str, Any]) -> str | None:

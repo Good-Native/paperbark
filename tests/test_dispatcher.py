@@ -1225,29 +1225,38 @@ def test_build_source_wrangler_rejects_non_integer_samples() -> None:
         build_source(spec)
 
 
-def test_build_source_wrangler_attaches_format_preset() -> None:
-    from paperbark.formats import RegexFormat
+@pytest.mark.parametrize("samples", [0, -1])
+def test_build_source_wrangler_rejects_non_positive_samples(samples: int) -> None:
+    spec = SourceConfig(
+        name="x",
+        type="wrangler",
+        options={"worker": "demo", "samples": samples},
+    )
+    with pytest.raises(DispatcherError, match="'samples' must be > 0"):
+        build_source(spec)
 
+
+def test_build_source_wrangler_rejects_non_json_format() -> None:
+    """Wrangler always emits ISO-prefixed JSON. A regex preset would
+    override the line_format on capture_iteration's side and silently
+    drop every line — fail closed at config-load time instead."""
     spec = SourceConfig(
         name="x",
         type="wrangler",
         options={"worker": "demo", "format": "apache-combined"},
     )
-    source = build_source(spec)
-    assert isinstance(source, WranglerSource)
-    assert isinstance(source.line_format, RegexFormat)
-    assert source.line_format.name == "apache-combined"
+    with pytest.raises(DispatcherError, match=r"wrangler always emits JSON.*not supported"):
+        build_source(spec)
 
 
-def test_build_source_wrangler_rejects_format_with_format_keys() -> None:
+def test_build_source_wrangler_accepts_explicit_json_format() -> None:
+    """``format = "json"`` is the documented no-op alias; it should pass
+    through cleanly even though wrangler rejects every other preset."""
     spec = SourceConfig(
         name="x",
         type="wrangler",
-        options={
-            "worker": "demo",
-            "format": "apache-combined",
-            "format_keys": {"timestamp": "ts"},
-        },
+        options={"worker": "demo", "format": "json"},
     )
-    with pytest.raises(DispatcherError, match="'format_keys' is JSON-only"):
-        build_source(spec)
+    source = build_source(spec)
+    assert isinstance(source, WranglerSource)
+    assert source.line_format is None

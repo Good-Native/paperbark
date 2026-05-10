@@ -378,3 +378,36 @@ def test_wrangler_stream_json_objects_handles_pretty_printed_input() -> None:
     assert objs[0]["outcome"] == "ok"
     assert objs[0]["msg"] == "string with } brace"
     assert objs[1]["outcome"] == "exception"
+
+
+def test_wrangler_default_runner_raises_on_non_zero_exit() -> None:
+    """An auth failure or unknown-account error from wrangler must
+    surface as ``WranglerProcessError`` with the captured stderr —
+    not a silent zero-line iteration."""
+    from paperbark.sources.wrangler import WranglerProcessError, _default_runner
+
+    # ``sh -c '... exit 2'`` exits 2 with stderr text and no stdout —
+    # mimics a wrangler auth/CLI failure cleanly without needing
+    # wrangler installed.
+    fake_command = ["sh", "-c", "echo 'auth failed' >&2; exit 2"]
+    with pytest.raises(WranglerProcessError, match=r"exited with code 2.*auth failed"):
+        list(_default_runner(fake_command, window_seconds=2.0, env={}))
+
+
+def test_wrangler_default_runner_terminates_idle_stream_within_window() -> None:
+    """The wall-clock window must fire even when the child writes
+    nothing. Regression guard: the reader runs in a background thread
+    so a blocking ``read`` can't hold the iteration past the deadline."""
+    import time as _time
+
+    from paperbark.sources.wrangler import _default_runner
+
+    # ``cat`` with no input blocks on stdin forever — perfect stand-in for
+    # a quiet wrangler tail. With a 1 s window the iteration must return
+    # within a few seconds (slack for thread / subprocess teardown).
+    fake_command = ["cat"]
+    started = _time.monotonic()
+    events = list(_default_runner(fake_command, window_seconds=1.0, env={}))
+    elapsed = _time.monotonic() - started
+    assert events == []
+    assert elapsed < 6.0

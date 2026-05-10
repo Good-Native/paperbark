@@ -269,12 +269,16 @@ def build_source(spec: SourceConfig) -> Source:
         if samples_raw <= 0:
             raise DispatcherError(f"source {spec.name!r}: 'samples' must be > 0, got {samples_raw}")
         line_format = _resolve_format(spec.options.get("format"), spec.name)
-        format_keys = _parse_format_keys(spec.options.get("format_keys"), spec.name)
-        if line_format is not None and format_keys is not None:
+        if line_format is not None:
+            # WranglerSource always emits ISO-prefixed JSON. A regex preset
+            # would override the line_format on capture_iteration's side,
+            # cause the cursor filter to misparse every wrangler line, and
+            # silently drop the lot. Fail closed instead.
             raise DispatcherError(
-                f"source {spec.name!r}: 'format_keys' is JSON-only and cannot be"
-                f" combined with format = {spec.options.get('format')!r}"
+                f"source {spec.name!r}: wrangler always emits JSON;"
+                f" format = {spec.options.get('format')!r} is not supported"
             )
+        format_keys = _parse_format_keys(spec.options.get("format_keys"), spec.name)
         return WranglerSource(
             worker=worker,
             account_id=account_id_raw,
