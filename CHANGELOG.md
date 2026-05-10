@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Add unreleased changes here._
+
+## Full changelog history
+
+## [0.1.9] - 2026-05-10
+
 ### Added
 
 - `paperbark init` now auto-detects `fly.toml` and
@@ -17,8 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   copy-paste step for users dropping into a fly or wrangler project
   for the first time. Pass `--no-detect` to suppress and emit the
   bare template.
-
-## Full changelog history
 
 ## [0.1.8] - 2026-05-10
 
