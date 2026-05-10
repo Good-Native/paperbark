@@ -36,12 +36,14 @@ verbatim, keeping the TOML the single source of truth at runtime.
 | `wrangler.toml`               | `wrangler`    | top-level `name` → `worker`; optional `account_id`         |
 | `wrangler.jsonc` / `.json`    | `wrangler`    | same as `wrangler.toml`; JSONC comments + trailing commas stripped |
 
-When both `fly.toml` and `wrangler.{toml,jsonc}` exist, both blocks
-are emitted with distinct names (`fly`, `wrangler`). When only the
-wrangler manifest pair both exist, `wrangler.toml` wins (matches
-wrangler 4.x's own resolution order). A malformed manifest emits a
-warning to stderr and is skipped — `init` still writes the bare
-template so the user isn't left without a starting point.
+When both `fly.toml` and any wrangler manifest (`wrangler.toml`,
+`wrangler.jsonc`, or `wrangler.json`) exist, both blocks are emitted
+with distinct names (`fly`, `wrangler`). When more than one wrangler
+manifest is present, `wrangler.toml` takes precedence over
+`wrangler.jsonc`, which in turn takes precedence over `wrangler.json`
+— matching wrangler 4.x's own resolution order. A malformed manifest
+emits a warning to stderr and is skipped, and `init` still writes the
+bare template so the user isn't left without a starting point.
 
 Pass `--no-detect` to suppress detection entirely:
 

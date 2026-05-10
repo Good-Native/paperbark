@@ -175,6 +175,33 @@ def test_cli_init_detects_both_manifests(tmp_path: Path, monkeypatch: pytest.Mon
     assert names == {"fly", "wrangler"}
 
 
+def test_cli_init_escapes_special_chars_in_detected_values(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A worker/app name containing a quote, backslash, or newline must
+    not break the generated TOML. Real wrangler/fly names don't allow
+    these characters, but the writer shouldn't trust manifest input —
+    a hand-edited or malformed manifest must still produce parseable
+    output (or fail loudly at parse time, never silently corrupt)."""
+    monkeypatch.chdir(tmp_path)
+    # tomllib accepts this as a single-line basic string with the
+    # double-quote inside, so the manifest itself parses fine — the
+    # question is whether our writer escapes it on the way back out.
+    (tmp_path / "wrangler.toml").write_text(
+        'name = "weird\\"name"\n',
+        encoding="utf-8",
+    )
+    rc = main(["init"])
+    assert rc == 0
+    written = (tmp_path / "paperbark.toml").read_text(encoding="utf-8")
+    # If the writer interpolated raw, the file would contain
+    # ``worker = "weird"name"`` which is invalid TOML. tomllib raising
+    # here would be the canary.
+    raw = tomllib.loads(written)
+    parsed = from_dict(raw)
+    assert parsed.sources[0].options["worker"] == 'weird"name'
+
+
 def test_cli_init_no_detect_emits_bare_template(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

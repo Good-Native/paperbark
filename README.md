@@ -29,7 +29,7 @@ For local development, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```sh
 # write a starter config in the current directory. Run inside a
-# directory containing `fly.toml` or `wrangler.{toml,jsonc}` and
+# directory containing `fly.toml` or `wrangler.{toml,jsonc,json}` and
 # the [[sources]] block is pre-filled with the app/worker name —
 # `paperbark monitor` is then ready to go without further edits.
 # Pass `--no-detect` to opt out and emit the bare template.

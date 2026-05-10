@@ -17,10 +17,27 @@ detection and emit the bare template unchanged.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
 from paperbark.detect import DetectedSource, detect
+
+
+def _toml_basic_string(value: str) -> str:
+    """Quote ``value`` as a TOML basic string.
+
+    JSON string encoding is a strict subset of TOML basic-string syntax
+    (both escape ``"``, ``\\``, ``\\b``, ``\\f``, ``\\n``, ``\\r``,
+    ``\\t``, and ``\\uXXXX`` identically), so :func:`json.dumps` is a
+    safe one-liner here. Fly app names and Cloudflare worker names are
+    in practice restricted to lowercase alphanumerics and hyphens, but
+    ``account_id`` and any future field reaching this helper might not
+    be — emitting raw ``f'"{value}"'`` would corrupt the file on a
+    stray quote or newline.
+    """
+    return json.dumps(value)
+
 
 DEFAULT_OUTPUT = "paperbark.toml"
 
@@ -97,17 +114,17 @@ def _render_source(detected: DetectedSource) -> str:
     """
     lines = [
         "[[sources]]",
-        f'name = "{detected.name}"',
-        f'type = "{detected.type}"',
+        f"name = {_toml_basic_string(detected.name)}",
+        f"type = {_toml_basic_string(detected.type)}",
     ]
     if detected.type == "flyctl":
         assert detected.app is not None, "flyctl detection without app"
-        lines.append(f'app = "{detected.app}"')
+        lines.append(f"app = {_toml_basic_string(detected.app)}")
     elif detected.type == "wrangler":
         assert detected.worker is not None, "wrangler detection without worker"
-        lines.append(f'worker = "{detected.worker}"')
+        lines.append(f"worker = {_toml_basic_string(detected.worker)}")
         if detected.account_id:
-            lines.append(f'account_id = "{detected.account_id}"')
+            lines.append(f"account_id = {_toml_basic_string(detected.account_id)}")
     return "\n".join(lines) + "\n"
 
 
