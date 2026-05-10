@@ -7,11 +7,11 @@ CloudWatch, plain files, stdin), runs a configurable set of probes over
 them, and writes a stable run-directory layout that downstream tooling can
 search across.
 
-> Status: v0.1.1 released to PyPI. The probe, format, source (flyctl),
-> iteration, aggregate, cursor-filter, search, dispatcher, and analyse
-> layers are all wired up; `paperbark monitor` runs end to end on a
-> configurable cadence with a `rich.live` ticker. See
-> [docs/ROADMAP.md](docs/ROADMAP.md) for current status.
+> Status: latest release on PyPI. The probe, format, source (flyctl,
+> file, stdin, wrangler), iteration, aggregate, cursor-filter, search,
+> dispatcher, and analyse layers are all wired up; `paperbark monitor`
+> runs end to end on a configurable cadence with a `rich.live` ticker.
+> See [docs/ROADMAP.md](docs/ROADMAP.md) for current status.
 
 ## Install
 
@@ -74,7 +74,7 @@ for the full schema reference.
 | Source                               | Status                         |
 | ------------------------------------ | ------------------------------ |
 | Fly.io (`flyctl logs`)               | implemented                    |
-| Cloudflare Workers (`wrangler tail`) | stub (interface only, post-v1) |
+| Cloudflare Workers (`wrangler tail`) | implemented                    |
 | Kubernetes (`kubectl logs`)          | stub (interface only, post-v1) |
 | AWS CloudWatch                       | stub (interface only, post-v1) |
 | Plain files                          | implemented                    |

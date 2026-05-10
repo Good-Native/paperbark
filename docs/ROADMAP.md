@@ -7,19 +7,21 @@ baseline, see [`CLAUDE.md`](../CLAUDE.md).
 
 - **Last verified:** 2026-05-10
 - **Latest release on `main`:** v0.1.7 (`Cut v0.1.7 release`,
-  `dbde19c`) — landed the real `stdin` source (PR #27,
-  `cat app.log | paperbark monitor --iterations 1`) on top of v0.1.6's
-  Blacksmith-runners CI migration and v0.1.5's changelog-driven release
-  automation. Remaining v0.2 stub work: real `wrangler`, `kubectl`,
-  and `cloudwatch` sources, and per-source probe overrides (today
+  `dbde19c`) — landed the real `stdin` source (PR #27) on top of
+  v0.1.6's Blacksmith-runners CI migration and v0.1.5's
+  changelog-driven release automation. The real `wrangler` source
+  is in flight on PR #28 (verified live against a Cloudflare
+  Worker). Remaining v0.2 stub work: real `kubectl` and
+  `cloudwatch` sources, and per-source probe overrides (today
   probe toggles and `[probes.patterns]` are global).
 - **Repo:** <https://github.com/Good-Native/paperbark>
 - **Releases:** v0.1.7 on 2026-05-09 (most recent). Each merge to
   `main` with an `[Unreleased]` entry auto-cuts the next patch tag,
   publishes to PyPI via trusted publishing, and creates the GitHub
   Release.
-- **Tests:** 419 passing across 26 test modules; CI has been green on
-  every push since the `Land uv.lock and unblock CI` change.
+- **Tests:** ~440 passing (run `uv run pytest -q` for the live
+  count; doc figures drift between releases). CI has been green
+  on every push since the `Land uv.lock and unblock CI` change.
 
 ### Implementation status
 
@@ -226,8 +228,12 @@ Carry these into the Python port:
 - ~~**Real `stdin` source.**~~ Done (Unreleased). `capture()` yields
   from `sys.stdin` with `format` / `format_keys` support; intended for
   one-shot pipes (`cat app.log | paperbark monitor --iterations 1`).
-- Real implementations for the remaining three stub sources
-  (`wrangler`, `kubectl`, `cloudwatch`). The `file` and `stdin`
+- ~~**Real `wrangler` source.**~~ Done (Unreleased). Wraps
+  `wrangler tail <worker> --format=json` with a wall-clock window,
+  ISO-prefix injection, and `outcome → level` mapping; verified
+  end-to-end against live Cloudflare Workers.
+- Real implementations for the remaining two stub sources
+  (`kubectl`, `cloudwatch`). The `file`, `stdin`, and `wrangler`
   sources landed Unreleased.
 - Per-source probe overrides (today probe toggles and
   `[probes.patterns]` are global).
