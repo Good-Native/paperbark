@@ -28,12 +28,17 @@ For local development, see [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Quickstart
 
 ```sh
-# write a starter config in the current directory
+# write a starter config in the current directory. Run inside a
+# directory containing `fly.toml` or `wrangler.{toml,jsonc,json}` and
+# the [[sources]] block is pre-filled with the app/worker name —
+# `paperbark monitor` is then ready to go without further edits.
+# Pass `--no-detect` to opt out and emit the bare template.
 paperbark init
 
 # add at least one source — uncomment the [[sources]] block in
 # paperbark.toml and point `app` at your Fly app. monitor exits with
-# "no sources configured" until you do.
+# "no sources configured" until you do. (Skip this step if `init`
+# auto-detected a manifest above.)
 
 # capture and analyse using config defaults (3s cadence, ~72 minutes)
 paperbark monitor

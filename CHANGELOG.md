@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Add unreleased changes here._
+### Added
+
+- `paperbark init` now auto-detects `fly.toml` and
+  `wrangler.{toml,jsonc,json}` in the current working directory and
+  pre-fills the generated `paperbark.toml` with a real `[[sources]]`
+  block (`type = "flyctl"` populated from `app`, or `type = "wrangler"`
+  populated from `name` and optional `account_id`). Drops the
+  copy-paste step for users dropping into a fly or wrangler project
+  for the first time. Pass `--no-detect` to suppress and emit the
+  bare template.
 
 ## Full changelog history
 

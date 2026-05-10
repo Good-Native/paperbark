@@ -21,6 +21,36 @@ If none is found and `--config` was not supplied, the loader returns
 A directory named `paperbark.toml` (an easy mistake) is skipped during
 discovery rather than masking a valid home config.
 
+## Project autodetection on `init`
+
+`paperbark init` inspects the current working directory and, if it
+finds a known project manifest, pre-fills the generated
+`paperbark.toml` with a real `[[sources]]` block instead of the
+commented-out placeholder. This is the only place detection runs —
+`monitor`, `search`, and `analyse` all read the written file
+verbatim, keeping the TOML the single source of truth at runtime.
+
+| Manifest                      | Source `type` | Mapped fields                                              |
+| ----------------------------- | ------------- | ---------------------------------------------------------- |
+| `fly.toml`                    | `flyctl`      | top-level `app` (legacy `app_name` is also accepted)        |
+| `wrangler.toml`               | `wrangler`    | top-level `name` → `worker`; optional `account_id`         |
+| `wrangler.jsonc` / `.json`    | `wrangler`    | same as `wrangler.toml`; JSONC comments + trailing commas stripped |
+
+When both `fly.toml` and any wrangler manifest (`wrangler.toml`,
+`wrangler.jsonc`, or `wrangler.json`) exist, both blocks are emitted
+with distinct names (`fly`, `wrangler`). When more than one wrangler
+manifest is present, `wrangler.toml` takes precedence over
+`wrangler.jsonc`, which in turn takes precedence over `wrangler.json`
+— matching wrangler 4.x's own resolution order. A malformed manifest
+emits a warning to stderr and is skipped, and `init` still writes the
+bare template so the user isn't left without a starting point.
+
+Pass `--no-detect` to suppress detection entirely:
+
+```sh
+paperbark init --no-detect    # always emits the bare template
+```
+
 ## Override semantics
 
 Every CLI flag is also a TOML key. CLI flags override TOML at runtime; TOML

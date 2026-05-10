@@ -287,6 +287,17 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Overwrite the output file if it already exists.",
     )
+    # Detection is on by default and only takes effect when the CWD
+    # has a fly.toml or wrangler.{toml,jsonc} — empty dirs see no
+    # behaviour change. ``--no-detect`` is the opt-out for users who
+    # want the bare template even inside a known project.
+    init.add_argument(
+        "--no-detect",
+        dest="detect",
+        action="store_false",
+        default=True,
+        help="Skip fly.toml / wrangler.toml detection; emit the bare template.",
+    )
 
     return parser
 
