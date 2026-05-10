@@ -74,7 +74,7 @@ for the full schema reference.
 | Source                               | Status                         |
 | ------------------------------------ | ------------------------------ |
 | Fly.io (`flyctl logs`)               | implemented                    |
-| Cloudflare Workers (`wrangler tail`) | stub (interface only, post-v1) |
+| Cloudflare Workers (`wrangler tail`) | implemented                    |
 | Kubernetes (`kubectl logs`)          | stub (interface only, post-v1) |
 | AWS CloudWatch                       | stub (interface only, post-v1) |
 | Plain files                          | implemented                    |

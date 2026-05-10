@@ -54,6 +54,8 @@ from paperbark.sources import (
     WranglerSource,
 )
 from paperbark.sources.flyctl import DEFAULT_SAMPLES as DEFAULT_FLYCTL_SAMPLES
+from paperbark.sources.wrangler import DEFAULT_SAMPLES as DEFAULT_WRANGLER_SAMPLES
+from paperbark.sources.wrangler import DEFAULT_WINDOW_SECONDS as DEFAULT_WRANGLER_WINDOW_SECONDS
 
 # Type aliases for the loop's injection points. Keeping them at module scope
 # avoids long inline ``Callable[...]`` annotations on every signature.
@@ -224,8 +226,63 @@ def build_source(spec: SourceConfig) -> Source:
             line_format=line_format,
         )
     if spec.type == "wrangler":
-        _reject_unknown_options(spec, frozenset())
-        return WranglerSource()
+        _reject_unknown_options(
+            spec,
+            frozenset(
+                {
+                    "worker",
+                    "account_id",
+                    "samples_window_seconds",
+                    "samples",
+                    "format",
+                    "format_keys",
+                }
+            ),
+        )
+        worker = spec.options.get("worker")
+        if not isinstance(worker, str) or not worker:
+            raise DispatcherError(f"source {spec.name!r}: 'worker' is required for wrangler")
+        account_id_raw = spec.options.get("account_id")
+        if account_id_raw is not None and (
+            not isinstance(account_id_raw, str) or not account_id_raw
+        ):
+            raise DispatcherError(
+                f"source {spec.name!r}: 'account_id' must be a non-empty string,"
+                f" got {type(account_id_raw).__name__}"
+            )
+        window_raw = spec.options.get("samples_window_seconds", DEFAULT_WRANGLER_WINDOW_SECONDS)
+        if isinstance(window_raw, bool) or not isinstance(window_raw, (int, float)):
+            raise DispatcherError(
+                f"source {spec.name!r}: 'samples_window_seconds' must be a number,"
+                f" got {type(window_raw).__name__}"
+            )
+        if window_raw <= 0:
+            raise DispatcherError(
+                f"source {spec.name!r}: 'samples_window_seconds' must be > 0, got {window_raw}"
+            )
+        samples_raw = spec.options.get("samples", DEFAULT_WRANGLER_SAMPLES)
+        if isinstance(samples_raw, bool) or not isinstance(samples_raw, int):
+            raise DispatcherError(
+                f"source {spec.name!r}: 'samples' must be an integer,"
+                f" got {type(samples_raw).__name__}"
+            )
+        if samples_raw <= 0:
+            raise DispatcherError(f"source {spec.name!r}: 'samples' must be > 0, got {samples_raw}")
+        line_format = _resolve_format(spec.options.get("format"), spec.name)
+        format_keys = _parse_format_keys(spec.options.get("format_keys"), spec.name)
+        if line_format is not None and format_keys is not None:
+            raise DispatcherError(
+                f"source {spec.name!r}: 'format_keys' is JSON-only and cannot be"
+                f" combined with format = {spec.options.get('format')!r}"
+            )
+        return WranglerSource(
+            worker=worker,
+            account_id=account_id_raw,
+            samples_window_seconds=window_raw,
+            samples=samples_raw,
+            format_keys=format_keys,
+            line_format=line_format,
+        )
     if spec.type == "kubectl":
         _reject_unknown_options(spec, frozenset())
         return KubectlSource()

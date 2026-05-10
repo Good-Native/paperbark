@@ -15,7 +15,7 @@ Built-in sources sit alongside it under `src/paperbark/sources/`.
 | Source                  | Module                                                    | Status                   |
 | ----------------------- | --------------------------------------------------------- | ------------------------ |
 | Fly.io (`flyctl logs`)  | [`flyctl.py`](../src/paperbark/sources/flyctl.py)         | implemented              |
-| Cloudflare (`wrangler`) | [`wrangler.py`](../src/paperbark/sources/wrangler.py)     | stub (raises on capture) |
+| Cloudflare (`wrangler`) | [`wrangler.py`](../src/paperbark/sources/wrangler.py)     | implemented              |
 | Kubernetes (`kubectl`)  | [`kubectl.py`](../src/paperbark/sources/kubectl.py)       | stub (raises on capture) |
 | AWS CloudWatch          | [`cloudwatch.py`](../src/paperbark/sources/cloudwatch.py) | stub (raises on capture) |
 | Plain files             | [`file.py`](../src/paperbark/sources/file.py)             | implemented              |
@@ -181,17 +181,63 @@ Notes:
   encoding, prefer the `file` source — it owns the underlying handle
   and applies `errors="replace"` safely.
 
-### Stubs (`wrangler`, `kubectl`, `cloudwatch`)
+### `wrangler`
 
-These three are placeholders: `capture()` raises `NotImplementedError`.
-They exist so a config that names one of these `type`s validates and
-resolves at parse time, and so the registry and dispatcher round-trip
-tests cover the eventual real implementation paths.
+Wraps `wrangler tail <worker> --format=json` for one Cloudflare
+Worker per `[[sources]]` entry. `wrangler tail` is a live stream
+with no `--no-tail` equivalent, so the source bounds each iteration
+by wall-clock time (`samples_window_seconds`, default 5 s) instead
+of by a snapshot window.
+
+| Option                   | Type    | Default | Description                                                                                                                                                                                                          |
+| ------------------------ | ------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `worker`                 | string  | —       | Required Cloudflare Worker name. Passed as `wrangler tail <worker> --format=json`.                                                                                                                                   |
+| `account_id`             | string  | none    | Cloudflare account ID. Set via the `CLOUDFLARE_ACCOUNT_ID` env var on the spawned subprocess. Required when the operator's wrangler login covers more than one account — wrangler refuses to pick one in non-interactive mode and the subprocess exits with a loud error otherwise. |
+| `samples_window_seconds` | number  | `5`     | Per-iteration capture window. After this many seconds the source SIGTERMs the wrangler subprocess and yields whatever events it collected.                                                                            |
+| `samples`                | integer | `400`   | Per-iteration line cap. Mirrors `flyctl`'s `samples` semantics (bounded `deque`); a busy Worker can't blow memory mid-iteration.                                                                                      |
+| `format`                 | string  | `"json"`| Same regex-preset selector as `flyctl`. Rare for wrangler (output is always JSON) but kept for parity. The cursor-filter caveat applies here too.                                                                     |
+| `format_keys`            | table   | none    | JSON-keys overrides; rejected when combined with a non-`json` `format`. Defaults to `{ component = "scriptName" }` if unset, so the canonical record's `component` field is populated automatically.                  |
+
+Notes:
+
+- **Pretty-printed JSON, not NDJSON.** Wrangler 4.x emits one
+  pretty-printed JSON object per Worker invocation, with no
+  delimiter between events. The source streams stdout into
+  `json.JSONDecoder.raw_decode` and yields one parsed dict per
+  top-level object — robust against indented payloads and strings
+  that contain braces.
+- **Leading ISO timestamp injection.** Wrangler payloads have no
+  leading timestamp, which would otherwise cause the cursor filter
+  to drop every line. The source converts `eventTimestamp` (ms
+  epoch) to ISO-8601 and prepends it to each yielded line so the
+  cursor filter's default leading-ISO path accepts the output.
+- **Severity mapping.** A synthetic `level` key is injected from
+  Cloudflare's `outcome` field: `ok` → `info`,
+  `exception` / `exceededCpu` → `error`,
+  `canceled` / `unknown` → `warn`. Anything else maps to `warn` so
+  unknown future outcomes still surface. Operators who want a
+  different mapping can override `format_keys.level` to point at
+  their own field.
+- **Per-event vs per-log emission.** Each wrangler event carries a
+  `logs[]` array (Worker `console.log` output). v0.2 emits one
+  canonical line per request; per-log expansion is a follow-up
+  toggle.
+- **Cleanup.** Mirrors flyctl's lifecycle: `terminate()` →
+  `wait(timeout=5)` → `kill()` if still alive.
+- The `since` parameter is silently ignored — `wrangler tail` has
+  no `--since` equivalent; cursor filtering downstream handles
+  bounding.
+
+### Stubs (`kubectl`, `cloudwatch`)
+
+These two are placeholders: `capture()` raises
+`NotImplementedError`. They exist so a config that names one of
+these `type`s validates and resolves at parse time, and so the
+registry and dispatcher round-trip tests cover the eventual real
+implementation paths.
 
 The expected shape when these land:
 
-- **`wrangler`** wraps `wrangler tail --format=json` (or the new
-  `wrangler tail` JSON output) for one Worker per source.
 - **`kubectl`** wraps `kubectl logs <pod>` with namespace/container
   selectors. Will likely accept `since` natively.
 - **`cloudwatch`** uses the AWS SDK's `filter_log_events` against one

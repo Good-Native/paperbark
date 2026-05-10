@@ -226,8 +226,12 @@ Carry these into the Python port:
 - ~~**Real `stdin` source.**~~ Done (Unreleased). `capture()` yields
   from `sys.stdin` with `format` / `format_keys` support; intended for
   one-shot pipes (`cat app.log | paperbark monitor --iterations 1`).
-- Real implementations for the remaining three stub sources
-  (`wrangler`, `kubectl`, `cloudwatch`). The `file` and `stdin`
+- ~~**Real `wrangler` source.**~~ Done (Unreleased). Wraps
+  `wrangler tail <worker> --format=json` with a wall-clock window,
+  ISO-prefix injection, and `outcome → level` mapping; verified
+  end-to-end against live Cloudflare Workers.
+- Real implementations for the remaining two stub sources
+  (`kubectl`, `cloudwatch`). The `file`, `stdin`, and `wrangler`
   sources landed Unreleased.
 - Per-source probe overrides (today probe toggles and
   `[probes.patterns]` are global).

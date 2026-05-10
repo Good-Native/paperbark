@@ -7,7 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Add unreleased changes here._
+### Added
+
+- The `wrangler` source is now a real implementation. Wraps
+  `wrangler tail <worker> --format=json` for one Cloudflare Worker
+  per `[[sources]]` entry. Bounds each iteration by wall-clock time
+  (`samples_window_seconds`, default `5`) since `wrangler tail` is
+  a live stream with no `--no-tail` equivalent. Required option:
+  `worker`. Optional: `account_id` (forwarded as
+  `CLOUDFLARE_ACCOUNT_ID` to the subprocess; required when the
+  operator's wrangler login covers more than one account),
+  `samples_window_seconds`, `samples`, `format`, `format_keys`.
+  Wrangler 4.x emits pretty-printed JSON, not NDJSON, so the
+  source streams stdout into `json.JSONDecoder.raw_decode` and
+  yields one parsed dict per top-level object. Each event is
+  decorated before yielding: ISO-8601 timestamp prefixed from
+  `eventTimestamp` so the cursor filter accepts it, and a
+  synthetic `level` key injected from Cloudflare's `outcome`
+  (`ok` → `info`, `exception` / `exceededCpu` → `error`,
+  `canceled` / `unknown` → `warn`). Defaults `format_keys` to
+  `{ component = "scriptName" }` so multi-Worker runs are easy
+  to disambiguate without explicit operator configuration.
+  Subprocess lifecycle mirrors flyctl (`terminate()` →
+  `wait(5s)` → `kill()`). See `docs/SOURCES.md` and
+  `docs/CONFIG.md`.
 
 ## Full changelog history
 

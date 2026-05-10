@@ -301,7 +301,39 @@ iterations yield nothing. There is intentionally no `encoding` knob —
 locale). For byte-level robustness or a custom encoding, use the
 `file` source.
 
-#### `wrangler`, `kubectl`, `cloudwatch`
+#### `wrangler` options
+
+Wraps `wrangler tail <worker> --format=json` for one Cloudflare
+Worker per source. Each `capture()` spawns a fresh subprocess for
+`samples_window_seconds`, then terminates it.
+
+| Key                      | Type    | Default  | Description                                                                                                                                       |
+| ------------------------ | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `worker`                 | string  | —        | Required Worker name.                                                                                                                             |
+| `account_id`             | string  | none     | Cloudflare account ID. Forwarded as `CLOUDFLARE_ACCOUNT_ID` to the wrangler subprocess. Required when the operator's wrangler login covers more than one account. |
+| `samples_window_seconds` | number  | `5`      | Per-iteration capture window in seconds.                                                                                                          |
+| `samples`                | integer | `400`    | Per-iteration line cap (bounded `deque`).                                                                                                         |
+| `format`                 | string  | `"json"` | Same regex-preset selector as `flyctl` — see the `flyctl` row above.                                                                              |
+| `format_keys`            | table   | none     | JSON-keys overrides; rejected when combined with a non-`json` `format`. Defaults to `{ component = "scriptName" }` if unset.                      |
+
+```toml
+[[sources]]
+name = "edge"
+type = "wrangler"
+worker = "my-cloudflare-worker"
+account_id = "abcdef0123456789abcdef0123456789"
+samples_window_seconds = 10
+```
+
+The source decorates each event before yielding: prepends an ISO
+timestamp from `eventTimestamp` (so the cursor filter's leading-ISO
+path accepts it), and injects a synthetic `level` key from
+Cloudflare's `outcome` field (`ok` → `info`,
+`exception`/`exceededCpu` → `error`,
+`canceled`/`unknown` → `warn`). See
+[`docs/SOURCES.md`](SOURCES.md#wrangler) for details.
+
+#### `kubectl`, `cloudwatch`
 
 Stubs in v1. They satisfy the `Source` Protocol so the config layer can
 name them, but `capture()` raises `NotImplementedError`. See

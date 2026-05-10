@@ -77,7 +77,7 @@ def test_build_source_flyctl_rejects_unknown_option() -> None:
         build_source(spec)
 
 
-@pytest.mark.parametrize("type_", ["wrangler", "kubectl", "cloudwatch"])
+@pytest.mark.parametrize("type_", ["kubectl", "cloudwatch"])
 def test_build_source_stub_rejects_unknown_option(type_: str) -> None:
     spec = SourceConfig(name="x", type=type_, options={"path": "/var/log/foo"})
     with pytest.raises(DispatcherError, match=r"unknown option\(s\) 'path'"):
@@ -87,7 +87,6 @@ def test_build_source_stub_rejects_unknown_option(type_: str) -> None:
 @pytest.mark.parametrize(
     "type_, expected_class",
     [
-        ("wrangler", WranglerSource),
         ("kubectl", KubectlSource),
         ("cloudwatch", CloudWatchSource),
     ],
@@ -1132,6 +1131,120 @@ def test_build_source_stdin_rejects_format_with_format_keys() -> None:
         name="x",
         type="stdin",
         options={
+            "format": "apache-combined",
+            "format_keys": {"timestamp": "ts"},
+        },
+    )
+    with pytest.raises(DispatcherError, match="'format_keys' is JSON-only"):
+        build_source(spec)
+
+
+# --- v0.2: real wrangler source -------------------------------------------
+
+
+def test_build_source_wrangler_returns_wrangler_instance() -> None:
+    spec = SourceConfig(name="x", type="wrangler", options={"worker": "demo"})
+    source = build_source(spec)
+    assert isinstance(source, WranglerSource)
+    assert source.worker == "demo"
+    assert source.account_id is None
+
+
+def test_build_source_wrangler_requires_worker() -> None:
+    spec = SourceConfig(name="x", type="wrangler", options={})
+    with pytest.raises(DispatcherError, match="'worker' is required"):
+        build_source(spec)
+
+
+def test_build_source_wrangler_rejects_empty_worker() -> None:
+    spec = SourceConfig(name="x", type="wrangler", options={"worker": ""})
+    with pytest.raises(DispatcherError, match="'worker' is required"):
+        build_source(spec)
+
+
+def test_build_source_wrangler_rejects_unknown_option() -> None:
+    spec = SourceConfig(
+        name="x",
+        type="wrangler",
+        options={"worker": "demo", "bogus": "x"},
+    )
+    with pytest.raises(DispatcherError, match=r"unknown option\(s\) 'bogus'"):
+        build_source(spec)
+
+
+def test_build_source_wrangler_threads_account_id() -> None:
+    spec = SourceConfig(
+        name="x",
+        type="wrangler",
+        options={"worker": "demo", "account_id": "acct-123"},
+    )
+    source = build_source(spec)
+    assert isinstance(source, WranglerSource)
+    assert source.account_id == "acct-123"
+
+
+def test_build_source_wrangler_rejects_empty_account_id() -> None:
+    spec = SourceConfig(
+        name="x",
+        type="wrangler",
+        options={"worker": "demo", "account_id": ""},
+    )
+    with pytest.raises(DispatcherError, match="'account_id' must be a non-empty string"):
+        build_source(spec)
+
+
+def test_build_source_wrangler_threads_window_and_samples() -> None:
+    spec = SourceConfig(
+        name="x",
+        type="wrangler",
+        options={"worker": "demo", "samples_window_seconds": 12, "samples": 50},
+    )
+    source = build_source(spec)
+    assert isinstance(source, WranglerSource)
+    assert source.samples_window_seconds == 12
+    assert source.samples == 50
+
+
+def test_build_source_wrangler_rejects_non_positive_window() -> None:
+    spec = SourceConfig(
+        name="x",
+        type="wrangler",
+        options={"worker": "demo", "samples_window_seconds": 0},
+    )
+    with pytest.raises(DispatcherError, match="'samples_window_seconds' must be > 0"):
+        build_source(spec)
+
+
+def test_build_source_wrangler_rejects_non_integer_samples() -> None:
+    spec = SourceConfig(
+        name="x",
+        type="wrangler",
+        options={"worker": "demo", "samples": True},
+    )
+    with pytest.raises(DispatcherError, match="'samples' must be an integer"):
+        build_source(spec)
+
+
+def test_build_source_wrangler_attaches_format_preset() -> None:
+    from paperbark.formats import RegexFormat
+
+    spec = SourceConfig(
+        name="x",
+        type="wrangler",
+        options={"worker": "demo", "format": "apache-combined"},
+    )
+    source = build_source(spec)
+    assert isinstance(source, WranglerSource)
+    assert isinstance(source.line_format, RegexFormat)
+    assert source.line_format.name == "apache-combined"
+
+
+def test_build_source_wrangler_rejects_format_with_format_keys() -> None:
+    spec = SourceConfig(
+        name="x",
+        type="wrangler",
+        options={
+            "worker": "demo",
             "format": "apache-combined",
             "format_keys": {"timestamp": "ts"},
         },
