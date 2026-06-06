@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Add unreleased changes here._
+### Added
+
+- `paperbark monitor` accepts a repeatable `--source NAME` flag that
+  scopes the run to a subset of configured `[[sources]]` entries by
+  name (e.g. `--source staging --source prod`). Mirrored as
+  `[monitor].only = ["staging", "prod"]` in TOML; CLI overrides TOML.
+  An unknown name is a hard error that lists the configured sources.
+  Empty / absent preserves the prior "capture from every source"
+  behaviour bit-for-bit. Saves commenting out `[[sources]]` blocks
+  when only one tenant needs a quick run.
 
 ## Full changelog history
 

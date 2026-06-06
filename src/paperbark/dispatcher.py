@@ -251,7 +251,7 @@ def build_source(spec: SourceConfig) -> Source:
                 f" got {type(account_id_raw).__name__}"
             )
         window_raw = spec.options.get("samples_window_seconds", DEFAULT_WRANGLER_WINDOW_SECONDS)
-        if isinstance(window_raw, bool) or not isinstance(window_raw, (int, float)):
+        if isinstance(window_raw, bool) or not isinstance(window_raw, int | float):
             raise DispatcherError(
                 f"source {spec.name!r}: 'samples_window_seconds' must be a number,"
                 f" got {type(window_raw).__name__}"
@@ -783,6 +783,25 @@ def run_monitor_loop(
             "no sources configured; add at least one [[sources]] entry to paperbark.toml"
         )
     monitor_cfg = monitor if monitor is not None else config.monitor
+    if monitor_cfg.only:
+        # Validate names against the known set first so an unknown name
+        # produces a precise error (with the available names) rather than
+        # silently filtering down to an empty list. Preserves input order
+        # from ``monitor_cfg.only`` so the slug reflects user intent.
+        known = {name for name, _ in sources}
+        unknown = [name for name in monitor_cfg.only if name not in known]
+        if unknown:
+            joined_unknown = ", ".join(repr(n) for n in unknown)
+            joined_known = ", ".join(repr(n) for n in sorted(known))
+            raise DispatcherError(
+                f"unknown source(s) {joined_unknown}; known sources: {joined_known}"
+            )
+        wanted = set(monitor_cfg.only)
+        # Preserve declaration order so the run-dir slug is stable across
+        # `--source a --source b` and `--source b --source a` only when
+        # the underlying config order is stable — which is the desired
+        # behaviour (slug tracks the configured order, not flag order).
+        sources = [(name, src) for name, src in sources if name in wanted]
     stop = stop_event if stop_event is not None else threading.Event()
     wall = clock if clock is not None else (lambda: datetime.now(tz=UTC))
 

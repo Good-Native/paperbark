@@ -378,6 +378,33 @@ def test_monitor_section_must_be_table() -> None:
         from_dict({"monitor": [1, 2, 3]})
 
 
+def test_monitor_only_defaults_to_empty_tuple() -> None:
+    # Absent ``[monitor].only`` means "no scoping" — the dispatcher will run
+    # every configured source, preserving pre-flag behaviour bit-for-bit.
+    config = Config.defaults()
+    assert config.monitor.only == ()
+
+
+def test_from_dict_parses_monitor_only_list() -> None:
+    config = from_dict({"monitor": {"only": ["staging", "prod"]}})
+    assert config.monitor.only == ("staging", "prod")
+
+
+def test_monitor_only_rejects_non_list() -> None:
+    with pytest.raises(ConfigError, match=r"\[monitor\]\.only must be an array of strings"):
+        from_dict({"monitor": {"only": "staging"}})
+
+
+def test_monitor_only_rejects_non_string_entry() -> None:
+    with pytest.raises(ConfigError, match=r"\[monitor\]\.only\[0\] must be a string"):
+        from_dict({"monitor": {"only": [1]}})
+
+
+def test_monitor_only_rejects_empty_entry() -> None:
+    with pytest.raises(ConfigError, match=r"\[monitor\]\.only entries must be non-empty"):
+        from_dict({"monitor": {"only": [""]}})
+
+
 # --- analyse ---------------------------------------------------------------
 
 

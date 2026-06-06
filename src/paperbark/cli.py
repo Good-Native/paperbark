@@ -131,6 +131,23 @@ def _build_parser() -> argparse.ArgumentParser:
             " Overrides [monitor].cleanup_mode."
         ),
     )
+    # ``action="append"`` with ``default=None`` mirrors --keyword / --regex
+    # so "flag absent" stays distinguishable from "explicit empty" and the
+    # merge step falls through to ``[monitor].only`` when the flag isn't
+    # supplied. Unknown names are validated against the configured sources
+    # at dispatch time (same code path as a bad ``[monitor].only`` value).
+    monitor.add_argument(
+        "--source",
+        dest="source",
+        action="append",
+        default=None,
+        metavar="NAME",
+        help=(
+            "Scope this run to one or more configured [[sources]] by name"
+            " (repeatable). Overrides [monitor].only. Unknown name is a"
+            " hard error."
+        ),
+    )
 
     search = subparsers.add_parser(
         "search",
@@ -499,6 +516,7 @@ def _merge_monitor_overrides(
     cleanup_enabled = base.cleanup_enabled
     cleanup_days = base.cleanup_days
     cleanup_mode = base.cleanup_mode
+    only = base.only
 
     interval_arg = getattr(args, "interval", None)
     if interval_arg is not None:
@@ -544,6 +562,19 @@ def _merge_monitor_overrides(
         # is just for clarity at the merge step.
         cleanup_mode = cleanup_mode_arg
 
+    source_arg = getattr(args, "source", None)
+    if source_arg is not None:
+        # ``action="append"`` can't produce an empty list (each flag append
+        # adds one entry); a None here means the flag was absent so we fall
+        # through to ``base.only`` from TOML. Empty strings are rejected so
+        # ``--source ""`` doesn't silently match nothing.
+        names: list[str] = []
+        for name in source_arg:
+            if not isinstance(name, str) or not name:
+                raise ValueError("--source name must be a non-empty string")
+            names.append(name)
+        only = tuple(names)
+
     return MonitorConfig(
         interval=interval,
         iterations=iterations,
@@ -552,6 +583,7 @@ def _merge_monitor_overrides(
         cleanup_enabled=cleanup_enabled,
         cleanup_days=cleanup_days,
         cleanup_mode=cleanup_mode,
+        only=only,
     )
 
 

@@ -30,11 +30,11 @@ commented-out placeholder. This is the only place detection runs —
 `monitor`, `search`, and `analyse` all read the written file
 verbatim, keeping the TOML the single source of truth at runtime.
 
-| Manifest                      | Source `type` | Mapped fields                                              |
-| ----------------------------- | ------------- | ---------------------------------------------------------- |
-| `fly.toml`                    | `flyctl`      | top-level `app` (legacy `app_name` is also accepted)        |
-| `wrangler.toml`               | `wrangler`    | top-level `name` → `worker`; optional `account_id`         |
-| `wrangler.jsonc` / `.json`    | `wrangler`    | same as `wrangler.toml`; JSONC comments + trailing commas stripped |
+| Manifest                   | Source `type` | Mapped fields                                                      |
+| -------------------------- | ------------- | ------------------------------------------------------------------ |
+| `fly.toml`                 | `flyctl`      | top-level `app` (legacy `app_name` is also accepted)               |
+| `wrangler.toml`            | `wrangler`    | top-level `name` → `worker`; optional `account_id`                 |
+| `wrangler.jsonc` / `.json` | `wrangler`    | same as `wrangler.toml`; JSONC comments + trailing commas stripped |
 
 When both `fly.toml` and any wrangler manifest (`wrangler.toml`,
 `wrangler.jsonc`, or `wrangler.json`) exist, both blocks are emitted
@@ -95,15 +95,16 @@ silently widen the contract. Decimals, signs, and unknown suffixes raise
 Cadence, scope, and identity for `paperbark monitor`. Defaults mirror
 `reference/logs.sh` so the Python port behaves identically out of the box.
 
-| Key               | Type     | Default | Description                                                                                                                       |
-| ----------------- | -------- | ------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `interval`        | duration | `3`     | Seconds (or duration string) between iterations. Must be `> 0`.                                                                   |
-| `iterations`      | integer  | `1440`  | Total iterations to run. `0` runs forever (until SIGINT).                                                                         |
-| `analyse_every`   | duration | `"5m"`  | Snapshot analyse cadence. `0` disables snapshots entirely.                                                                        |
-| `run_id`          | string   | `""`    | Run slug. Empty triggers an auto-generated `<adjective>-<colour>` slug at start.                                                  |
-| `cleanup_enabled` | boolean  | `true`  | Run the rotation pass at loop start. Set `false` (or `--no-cleanup`) to disable.                                                  |
-| `cleanup_days`    | integer  | `1`     | Rotate run dirs older than `N` days. `0` rotates every older run, including yesterday's.                                          |
-| `cleanup_mode`    | string   | `"zip"` | `"zip"` archives each `<app>/raw/` to a sibling `raw.zip` and removes per-iter JSON/CSV; `"delete"` removes the run dir entirely. |
+| Key               | Type             | Default | Description                                                                                                                                                                                         |
+| ----------------- | ---------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `interval`        | duration         | `3`     | Seconds (or duration string) between iterations. Must be `> 0`.                                                                                                                                     |
+| `iterations`      | integer          | `1440`  | Total iterations to run. `0` runs forever (until SIGINT).                                                                                                                                           |
+| `analyse_every`   | duration         | `"5m"`  | Snapshot analyse cadence. `0` disables snapshots entirely.                                                                                                                                          |
+| `run_id`          | string           | `""`    | Run slug. Empty triggers an auto-generated `<adjective>-<colour>` slug at start.                                                                                                                    |
+| `cleanup_enabled` | boolean          | `true`  | Run the rotation pass at loop start. Set `false` (or `--no-cleanup`) to disable.                                                                                                                    |
+| `cleanup_days`    | integer          | `1`     | Rotate run dirs older than `N` days. `0` rotates every older run, including yesterday's.                                                                                                            |
+| `cleanup_mode`    | string           | `"zip"` | `"zip"` archives each `<app>/raw/` to a sibling `raw.zip` and removes per-iter JSON/CSV; `"delete"` removes the run dir entirely.                                                                   |
+| `only`            | array of strings | `[]`    | Scope a run to a subset of `[[sources]]` by `name`. Empty list captures from every configured source (current behaviour). Names that don't match a configured source are a hard error at run start. |
 
 `run_id` validation: letters, numbers, `.`, `_`, `-`; must start with a
 letter or number. The same regex (`^[A-Za-z0-9][A-Za-z0-9._-]*$`) applies
@@ -118,7 +119,12 @@ already reads `<app>/raw.zip` transparently, so rotated runs remain
 searchable.
 
 CLI flags: `--interval`, `--iterations`, `--analyse-every`, `--run-id`,
-`--cleanup` / `--no-cleanup`, `--cleanup-days`, `--cleanup-mode`.
+`--cleanup` / `--no-cleanup`, `--cleanup-days`, `--cleanup-mode`,
+repeatable `--source`.
+
+`--source NAME` is repeatable (`--source staging --source prod`) and
+overrides `[monitor].only` for the invocation. With no flag and no TOML
+key, every configured source runs.
 
 ### `[analyse]`
 
@@ -337,14 +343,14 @@ Wraps `wrangler tail <worker> --format=json` for one Cloudflare
 Worker per source. Each `capture()` spawns a fresh subprocess for
 `samples_window_seconds`, then terminates it.
 
-| Key                      | Type    | Default  | Description                                                                                                                                       |
-| ------------------------ | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `worker`                 | string  | —        | Required Worker name.                                                                                                                             |
+| Key                      | Type    | Default  | Description                                                                                                                                                       |
+| ------------------------ | ------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `worker`                 | string  | —        | Required Worker name.                                                                                                                                             |
 | `account_id`             | string  | none     | Cloudflare account ID. Forwarded as `CLOUDFLARE_ACCOUNT_ID` to the wrangler subprocess. Required when the operator's wrangler login covers more than one account. |
-| `samples_window_seconds` | number  | `5`      | Per-iteration capture window in seconds.                                                                                                          |
-| `samples`                | integer | `400`    | Per-iteration line cap (bounded `deque`).                                                                                                         |
-| `format`                 | string  | `"json"` | Same regex-preset selector as `flyctl` — see the `flyctl` row above.                                                                              |
-| `format_keys`            | table   | none     | JSON-keys overrides; rejected when combined with a non-`json` `format`. Defaults to `{ component = "scriptName" }` if unset.                      |
+| `samples_window_seconds` | number  | `5`      | Per-iteration capture window in seconds.                                                                                                                          |
+| `samples`                | integer | `400`    | Per-iteration line cap (bounded `deque`).                                                                                                                         |
+| `format`                 | string  | `"json"` | Same regex-preset selector as `flyctl` — see the `flyctl` row above.                                                                                              |
+| `format_keys`            | table   | none     | JSON-keys overrides; rejected when combined with a non-`json` `format`. Defaults to `{ component = "scriptName" }` if unset.                                      |
 
 ```toml
 [[sources]]

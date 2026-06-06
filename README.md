@@ -49,6 +49,9 @@ paperbark monitor --interval 1s --run-id incident-pr349 --analyse-every 30s
 # capture forever; press Ctrl+C to write the final report and exit
 paperbark monitor --iterations 0
 
+# scope a single run to one or more configured sources (repeatable)
+paperbark monitor --source staging --source prod
+
 # search across captured runs
 paperbark search --keyword "panic"
 

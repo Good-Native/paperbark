@@ -362,12 +362,14 @@ def _build_monitor_config(
     iterations: int = 0,
     analyse_every: int = 0,
     run_id: str = "test",
+    only: tuple[str, ...] = (),
 ) -> MonitorConfig:
     return MonitorConfig(
         interval=interval,
         iterations=iterations,
         analyse_every=analyse_every,
         run_id=run_id,
+        only=only,
     )
 
 
@@ -601,6 +603,123 @@ def test_run_monitor_loop_logs_overrun_warning(tmp_path: Path) -> None:
     )
     log_text = (result.run_dir / "monitor.log").read_text(encoding="utf-8")
     assert "running back-to-back" in log_text
+
+
+# --- monitor.only filtering ------------------------------------------------
+
+
+def test_run_monitor_loop_filters_to_only_named_sources(tmp_path: Path) -> None:
+    fixed = datetime(2026, 5, 3, 14, 30, 45, tzinfo=UTC)
+    cfg = Config(
+        root=tmp_path / "logs",
+        sources=(
+            SourceConfig(name="staging", type="flyctl"),
+            SourceConfig(name="prod", type="flyctl"),
+        ),
+    )
+    monitor = _build_monitor_config(interval=1, iterations=1, analyse_every=0, only=("staging",))
+
+    result = run_monitor_loop(
+        cfg,
+        monitor=monitor,
+        built_sources=[
+            ("staging", _FakeSource(_scripted_lines())),
+            ("prod", _FakeSource(_scripted_lines())),
+        ],
+        stop_event=threading.Event(),
+        monotonic=_FakeMonotonic(),
+        clock=lambda: fixed,
+    )
+    # Only the matching source captured anything on disk.
+    assert (result.run_dir / "staging" / "summary.md").exists()
+    assert not (result.run_dir / "prod").exists()
+
+
+def test_run_monitor_loop_filters_keep_multiple_names(tmp_path: Path) -> None:
+    fixed = datetime(2026, 5, 3, 14, 30, 45, tzinfo=UTC)
+    cfg = Config(
+        root=tmp_path / "logs",
+        sources=(
+            SourceConfig(name="staging", type="flyctl"),
+            SourceConfig(name="prod", type="flyctl"),
+            SourceConfig(name="canary", type="flyctl"),
+        ),
+    )
+    monitor = _build_monitor_config(
+        interval=1, iterations=1, analyse_every=0, only=("staging", "canary")
+    )
+
+    result = run_monitor_loop(
+        cfg,
+        monitor=monitor,
+        built_sources=[
+            ("staging", _FakeSource(_scripted_lines())),
+            ("prod", _FakeSource(_scripted_lines())),
+            ("canary", _FakeSource(_scripted_lines())),
+        ],
+        stop_event=threading.Event(),
+        monotonic=_FakeMonotonic(),
+        clock=lambda: fixed,
+    )
+    assert (result.run_dir / "staging" / "summary.md").exists()
+    assert (result.run_dir / "canary" / "summary.md").exists()
+    assert not (result.run_dir / "prod").exists()
+
+
+def test_run_monitor_loop_empty_only_keeps_every_source(tmp_path: Path) -> None:
+    # Empty tuple is the absent-flag sentinel and must preserve the
+    # pre-flag behaviour bit-for-bit (every configured source runs).
+    fixed = datetime(2026, 5, 3, 14, 30, 45, tzinfo=UTC)
+    cfg = Config(
+        root=tmp_path / "logs",
+        sources=(
+            SourceConfig(name="api", type="flyctl"),
+            SourceConfig(name="worker", type="flyctl"),
+        ),
+    )
+    monitor = _build_monitor_config(interval=1, iterations=1, analyse_every=0)
+
+    result = run_monitor_loop(
+        cfg,
+        monitor=monitor,
+        built_sources=[
+            ("api", _FakeSource(_scripted_lines())),
+            ("worker", _FakeSource(_scripted_lines())),
+        ],
+        stop_event=threading.Event(),
+        monotonic=_FakeMonotonic(),
+        clock=lambda: fixed,
+    )
+    assert (result.run_dir / "api" / "summary.md").exists()
+    assert (result.run_dir / "worker" / "summary.md").exists()
+
+
+def test_run_monitor_loop_unknown_only_raises(tmp_path: Path) -> None:
+    cfg = Config(
+        root=tmp_path / "logs",
+        sources=(
+            SourceConfig(name="staging", type="flyctl"),
+            SourceConfig(name="prod", type="flyctl"),
+        ),
+    )
+    monitor = _build_monitor_config(interval=1, iterations=1, analyse_every=0, only=("staaaging",))
+
+    with pytest.raises(DispatcherError, match=r"unknown source\(s\) 'staaaging'") as exc_info:
+        run_monitor_loop(
+            cfg,
+            monitor=monitor,
+            built_sources=[
+                ("staging", _FakeSource(_scripted_lines())),
+                ("prod", _FakeSource(_scripted_lines())),
+            ],
+            stop_event=threading.Event(),
+            monotonic=_FakeMonotonic(),
+            clock=lambda: datetime(2026, 5, 3, 14, 30, 45, tzinfo=UTC),
+        )
+    # Known names are listed to help the user spot the typo.
+    message = str(exc_info.value)
+    assert "'staging'" in message
+    assert "'prod'" in message
 
 
 # --- v0.1.1: samples knob + format_keys override --------------------------

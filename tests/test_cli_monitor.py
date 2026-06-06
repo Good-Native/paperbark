@@ -31,6 +31,7 @@ def _ns(**overrides: object) -> argparse.Namespace:
         "iterations": None,
         "run_id": None,
         "analyse_every": None,
+        "source": None,
     }
     base.update(overrides)
     return argparse.Namespace(**base)
@@ -77,6 +78,33 @@ def test_merge_rejects_invalid(kwargs: dict[str, object], expected: str) -> None
 def test_merge_accepts_safe_run_id() -> None:
     result = _merge_monitor_overrides(MonitorConfig(), _ns(run_id="incident_2026-05-04.v1"))
     assert result.run_id == "incident_2026-05-04.v1"
+
+
+def test_merge_preserves_toml_only_when_flag_absent() -> None:
+    # Absent --source must fall through to ``[monitor].only`` — same
+    # precedence rule every other monitor flag follows.
+    base = MonitorConfig(only=("staging",))
+    result = _merge_monitor_overrides(base, _ns())
+    assert result.only == ("staging",)
+
+
+def test_merge_applies_repeated_source_flag() -> None:
+    # ``action="append"`` collects each --source occurrence into a list;
+    # the merge converts it to a tuple so the dataclass stays frozen.
+    result = _merge_monitor_overrides(MonitorConfig(), _ns(source=["staging", "prod"]))
+    assert result.only == ("staging", "prod")
+
+
+def test_merge_cli_source_overrides_toml_only() -> None:
+    # CLI overrides TOML, matching every other monitor flag's precedence.
+    base = MonitorConfig(only=("from-toml",))
+    result = _merge_monitor_overrides(base, _ns(source=["from-cli"]))
+    assert result.only == ("from-cli",)
+
+
+def test_merge_rejects_empty_source_name() -> None:
+    with pytest.raises(ValueError, match="--source name must be a non-empty string"):
+        _merge_monitor_overrides(MonitorConfig(), _ns(source=[""]))
 
 
 # --- snapshot runner -------------------------------------------------------
