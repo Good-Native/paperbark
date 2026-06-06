@@ -49,6 +49,8 @@ from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from typing import IO, TYPE_CHECKING, Any
 
+from paperbark.sources._exec import resolve_executable
+
 if TYPE_CHECKING:
     from paperbark.formats import Format
 
@@ -132,6 +134,10 @@ def _default_runner(
     account-selection failures don't masquerade as quiet iterations.
     """
     full_env = {**os.environ, **env}
+    # Resolve the executable against PATH (honouring PATHEXT on Windows) so
+    # the npm-installed ``wrangler.cmd`` shim is found — CreateProcess won't
+    # locate a bare ``wrangler`` otherwise. See ``sources/_exec.py``.
+    command = resolve_executable(command)
     # Command is operator-configured and executed without a shell.
     process = subprocess.Popen(  # noqa: S603
         command,
@@ -217,7 +223,7 @@ def _event_to_line(event: dict[str, Any]) -> str | None:
     the source keeps the rest of the pipeline simple.
     """
     raw_ts = event.get("eventTimestamp")
-    if not isinstance(raw_ts, (int, float)):
+    if not isinstance(raw_ts, int | float):
         return None
     iso = datetime.fromtimestamp(raw_ts / 1000.0, tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     outcome = event.get("outcome")

@@ -21,6 +21,8 @@ from collections import deque
 from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING
 
+from paperbark.sources._exec import resolve_executable
+
 if TYPE_CHECKING:
     from paperbark.formats import Format
 
@@ -38,6 +40,10 @@ def _default_runner(command: list[str]) -> Iterator[str]:
     Cleans up the child process on early exit (consumer ``break``s,
     raises, or generator is closed).
     """
+    # Resolve the executable against PATH (honouring PATHEXT on Windows) so a
+    # ``.cmd``/``.bat`` shim is found; CreateProcess won't locate a bare name.
+    # See ``sources/_exec.py``.
+    command = resolve_executable(command)
     # The command list is built from operator-configured values; it is
     # invoked without a shell and we never concatenate untrusted strings into
     # a single arg. Bandit S603 is a generic "subprocess invocation" warning

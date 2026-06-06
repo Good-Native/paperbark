@@ -7,16 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+### Fixed
 
-- `paperbark monitor` accepts a repeatable `--source NAME` flag that
-  scopes the run to a subset of configured `[[sources]]` entries by
-  name (e.g. `--source staging --source prod`). Mirrored as
-  `[monitor].only = ["staging", "prod"]` in TOML; CLI overrides TOML.
-  An unknown name is a hard error that lists the configured sources.
-  Empty / absent preserves the prior "capture from every source"
-  behaviour bit-for-bit. Saves commenting out `[[sources]]` blocks
-  when only one tenant needs a quick run.
+- Log sources now resolve their CLI executable via `shutil.which` before
+  spawning, so `paperbark monitor` finds tools installed as Windows
+  `.cmd`/`.bat` shims. Previously a `wrangler` source on Windows died with
+  `FileNotFoundError: [WinError 2]` because `subprocess.Popen(shell=False)`
+  routes through `CreateProcess`, which does not consult `PATHEXT` for a
+  bare `wrangler` (npm installs it as `wrangler.cmd`, with no `.exe`). The
+  `flyctl` source shared the same latent fragility. A genuinely missing
+  tool still raises the same `FileNotFoundError` as before.
 
 ## Full changelog history
 
