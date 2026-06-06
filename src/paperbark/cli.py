@@ -564,16 +564,14 @@ def _merge_monitor_overrides(
 
     source_arg = getattr(args, "source", None)
     if source_arg is not None:
-        # ``action="append"`` can't produce an empty list (each flag append
-        # adds one entry); a None here means the flag was absent so we fall
-        # through to ``base.only`` from TOML. Empty strings are rejected so
-        # ``--source ""`` doesn't silently match nothing.
-        names: list[str] = []
+        # ``action="append"`` always yields a list of strings; a None here
+        # means the flag was absent, so we fall through to ``base.only`` from
+        # TOML. Empty strings are rejected so ``--source ""`` doesn't silently
+        # match nothing.
         for name in source_arg:
-            if not isinstance(name, str) or not name:
+            if not name:
                 raise ValueError("--source name must be a non-empty string")
-            names.append(name)
-        only = tuple(names)
+        only = tuple(source_arg)
 
     return MonitorConfig(
         interval=interval,

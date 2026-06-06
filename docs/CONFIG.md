@@ -349,8 +349,8 @@ Worker per source. Each `capture()` spawns a fresh subprocess for
 | `account_id`             | string  | none     | Cloudflare account ID. Forwarded as `CLOUDFLARE_ACCOUNT_ID` to the wrangler subprocess. Required when the operator's wrangler login covers more than one account. |
 | `samples_window_seconds` | number  | `5`      | Per-iteration capture window in seconds.                                                                                                                          |
 | `samples`                | integer | `400`    | Per-iteration line cap (bounded `deque`).                                                                                                                         |
-| `format`                 | string  | `"json"` | Same regex-preset selector as `flyctl` — see the `flyctl` row above.                                                                                              |
-| `format_keys`            | table   | none     | JSON-keys overrides; rejected when combined with a non-`json` `format`. Defaults to `{ component = "scriptName" }` if unset.                                      |
+| `format`                 | string  | `"json"` | Wrangler emits JSON only; `json` is the sole accepted value (an explicit no-op alias). Any other preset is rejected at run start.                                 |
+| `format_keys`            | table   | none     | JSON-key overrides for the wrangler output. Defaults to `{ component = "scriptName" }` if unset.                                                                  |
 
 ```toml
 [[sources]]
