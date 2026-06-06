@@ -1,88 +1,41 @@
 # Paperbark — roadmap
 
-Living document. Update as items land. For project rules and tooling
-baseline, see [`CLAUDE.md`](../CLAUDE.md).
+Living document. States overall progress and forward plans. Versions,
+dates, PR numbers, and commit hashes deliberately live elsewhere
+([`CHANGELOG.md`](../CHANGELOG.md), `git log`, GitHub releases) so this
+file doesn't drift. For project rules and tooling baseline, see
+[`CLAUDE.md`](../CLAUDE.md).
 
 ## Current state
 
-- **Last verified:** 2026-05-10
-- **Latest release on `main`:** v0.1.7 (`Cut v0.1.7 release`,
-  `dbde19c`) — landed the real `stdin` source (PR #27) on top of
-  v0.1.6's Blacksmith-runners CI migration and v0.1.5's
-  changelog-driven release automation. The real `wrangler` source
-  is in flight on PR #28 (verified live against a Cloudflare
-  Worker). Remaining v0.2 stub work: real `kubectl` and
-  `cloudwatch` sources, and per-source probe overrides (today
-  probe toggles and `[probes.patterns]` are global).
-- **Repo:** <https://github.com/Good-Native/paperbark>
-- **Releases:** v0.1.7 on 2026-05-09 (most recent). Each merge to
-  `main` with an `[Unreleased]` entry auto-cuts the next patch tag,
-  publishes to PyPI via trusted publishing, and creates the GitHub
-  Release.
-- **Tests:** ~440 passing (run `uv run pytest -q` for the live
-  count; doc figures drift between releases). CI has been green
-  on every push since the `Land uv.lock and unblock CI` change.
+Paperbark is shipped to PyPI and runs end to end. `paperbark monitor`
+captures on a fixed cadence, fires snapshot analyses, swaps in a
+`rich.live` ticker on a TTY (plain progress lines off-TTY), and writes
+a final analysis at the run root when the loop ends. Every CLI flag
+is mirrored as a TOML key; flags override TOML at runtime. CI is green
+across the supported Python matrix.
+
+Repo: <https://github.com/Good-Native/paperbark>.
 
 ### Implementation status
 
-| #   | Step                                                        | Status                                                  |
-| --- | ----------------------------------------------------------- | ------------------------------------------------------- |
-| 1   | Port `filter_since.py` → `paperbark.cursor`                 | ✅ done                                                 |
-| 2   | Port `analyse_logs.py` → `paperbark.probes/`                | ✅ done                                                 |
-| 3   | Port `aggregate_logs.py` → `paperbark.aggregate`            | ✅ done                                                 |
-| 4   | Port `process_logs.py` → `paperbark.iteration`              | ✅ done                                                 |
-| 5   | Port `search_logs.py` → `paperbark.search` (wired into CLI) | ✅ done (PR #1)                                         |
-| 6   | Source interface + flyctl source (stubs for the rest)       | ✅ done                                                 |
-| 7   | Format interface + built-in presets                         | ✅ done                                                 |
-| 8   | Dispatcher and animator (`rich.live`) replacing `logs.sh`   | ✅ done — long-running loop + `rich.live` ticker landed |
-| 9   | `paperbark init` TOML writer                                | ✅ done (PR #6)                                         |
-| 10  | Wire `paperbark analyse` over captured runs                 | ✅ done (PR #7)                                         |
-
-An end-to-end live `paperbark monitor` run is now wired: the loop
-captures on a fixed cadence, fires snapshot analyses every
-`analyse_every` seconds, swaps in the `rich.live` ticker on a TTY
-(plain progress lines on non-TTY), and writes the final analysis at
-the run root when the loop ends. The `.gitattributes` LF baseline
-landed direct-to-`main` in `644a4f4`. PR #9 threaded `[analyse]` and
-`[search]` through the TOML loader, so every CLI flag for those
-subcommands is also a TOML key. PRs #10 and #11 filled in
-`docs/CONFIG.md` and `docs/SOURCES.md`; PR #13 added `docs/PROBES.md`,
-wired `[probes]` toggles and `[probes.patterns]` overrides through to
-the runtime, and retired `reference/`; PR #14 cut the v0.1.0 version
-bump (`pyproject.toml`, `__init__.py`, `uv.lock`, `CHANGELOG.md`).
-Remaining shortlist after v0.1.0: PyPI reservation and first upload,
-git tag + GitHub Release, Homebrew formula.
-
-### Scaffold (done)
-
-- Project metadata in `pyproject.toml` (hatchling, ruff, pytest, mypy);
-  console-script entry point `paperbark = paperbark.cli:main`.
-- Pre-commit hooks (`ruff`, `ruff format`, `prettier` for md/yaml/json).
-- GitHub Actions CI matrix on Python 3.11 / 3.12 / 3.13: `ruff check`,
-  `ruff format --check`, `mypy`, `pytest`, `pip-audit`.
-- argparse CLI skeleton with `monitor`, `search`, `analyse`, `init`
-  subcommands (all stub out with a "not yet implemented" notice and
-  exit non-zero).
-- Smoke tests so CI is green from day one.
-- `LICENSE` (MIT), `CHANGELOG.md` (Keep-a-Changelog), `CONTRIBUTING.md`,
-  `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1, adopted by reference).
-
-### Open operational notes
-
-- **`tzdata`** is now a hard runtime dep on Windows so
-  `zoneinfo.ZoneInfo("Australia/Melbourne")` resolves without the system
-  zoneinfo database. No-op on Linux/macOS where the OS already ships it.
-- **Remote uses HTTPS**, not SSH — the user's local SSH identity isn't
-  registered against the `Good-Native` org. Pushes go via `gh`'s
-  credential helper. Optional follow-up: register an SSH key.
-- **Direct-to-main commits before PR #1** never went through the
-  CodeRabbit bot (only the search PR did). The CLI is installed in
-  WSL; running `coderabbit review --type committed --base-commit
-bf4af64 --config CLAUDE.md` from inside the repo will surface any
-  findings on those seven commits without re-opening retroactive PRs.
-- **Workflow going forward**: branch + PR per step (matches
-  `CONTRIBUTING.md`), so the bot catches issues before they land on
-  `main`.
+| Step                                                   | Status  |
+| ------------------------------------------------------ | ------- |
+| Cursor filter (`paperbark.cursor`)                     | done    |
+| Probes (`paperbark.probes`)                            | done    |
+| Aggregate (`paperbark.aggregate`)                      | done    |
+| Iteration (`paperbark.iteration`)                      | done    |
+| Search (`paperbark.search`, wired into CLI)            | done    |
+| Source interface + flyctl source                       | done    |
+| Format interface + built-in regex presets              | done    |
+| Dispatcher and `rich.live` animator                    | done    |
+| `paperbark init` TOML writer (with manifest detection) | done    |
+| `paperbark analyse` over captured runs                 | done    |
+| Real `file`, `stdin`, `wrangler` sources               | done    |
+| Format-aware cursor filter                             | done    |
+| Real `kubectl` source                                  | planned |
+| Real `cloudwatch` source                               | planned |
+| Per-source probe overrides                             | planned |
 
 ## V1 scope
 
@@ -123,9 +76,9 @@ Each finding shape: `{count, first_seen, last_seen, peak}`. Keep the
 bounded LRU dedup in the per-app analyser as a safety net on top of
 cursor filtering.
 
-Make every probe class config-toggleable. Make probe regex sets
-(autoscaler, DB/external, Sentry) config-overridable so a
-Cloudflare-Worker user can replace them without forking.
+Every probe class is config-toggleable. Probe regex sets (autoscaler,
+DB/external, Sentry) are config-overridable so a Cloudflare-Worker user
+can replace them without forking.
 
 ### Output layout (preserve — public contract)
 
@@ -142,36 +95,11 @@ logs/YYYYMMDD/HHMM_<slug>_<settings>/
 
 Don't change the shape without a major-version bump (per `CLAUDE.md`).
 
-## Implementation plan
-
-Suggested ordering, smallest and most-tested first:
-
-1. ~~Port `filter_since.py` → `src/paperbark/cursor.py`.~~ Done.
-2. ~~Port `analyse_logs.py` → `src/paperbark/probes/`. Split per-probe
-   classes; each behind a TOML toggle.~~ Done. Per-probe TOML toggles
-   still pending — they land with the config layer in step 8.
-3. ~~Port `aggregate_logs.py` → `src/paperbark/aggregate.py`.~~ Done.
-4. ~~Port `process_logs.py` → `src/paperbark/iteration.py`.~~ Done.
-5. ~~Port `search_logs.py` → wire into `paperbark search`.~~ Done (PR #1).
-6. ~~Source interface (`src/paperbark/sources/__init__.py`) plus the
-   flyctl source. Stubs for the others.~~ Done.
-7. ~~Format interface plus the built-in presets.~~ Done.
-8. **Dispatcher and animator** (`rich.live`) replacing `logs.sh`.
-   Lands the TOML config loader (`./paperbark.toml` →
-   `~/.config/paperbark/config.toml`), wires `monitor` and `analyse`
-   subcommand dispatch into `cli.main`, and composes
-   source → cursor filter → iteration → aggregate → probes end to end.
-9. **`paperbark init`** TOML writer (template with every key the
-   config layer recognises).
-
-Each step lands behind passing CI. Add a `CHANGELOG.md` entry per
-user-visible change.
-
 ### What was kept vs rebuilt
 
-The bash originals (formerly tracked under `reference/`, also in
+The bash originals (formerly `reference/`, also in
 `~/Documents/GitHub/hover/scripts/`, MIT-licensed) were retired ahead of
-v0.1. The mapping for posterity:
+v1. The mapping for posterity:
 
 | File                       | Action                                                   |
 | -------------------------- | -------------------------------------------------------- |
@@ -211,48 +139,31 @@ Carry these into the Python port:
 - External `Source` plugin loader (interface documented; loader not
   shipped).
 
-## v0.2 shortlist
+## Forward plans
 
-- ~~**Wire regex-format presets into iteration.**~~ Done (Unreleased).
-  `[[sources]]` accepts `format = "<preset>"` for `json` /
-  `apache-combined` / `nginx-default` / `syslog-rfc5424`, and the
-  iteration parser routes through the format layer when set. Custom
-  inline `RegexFormat` definitions remain a v0.2+ follow-up; for now
-  operators with bespoke shapes can either contribute a preset or use
-  the JSON path with `format_keys`.
-- ~~**Format-aware cursor mode.**~~ Done (Unreleased). When a source
-  attaches a `line_format`, the cursor filter advances from the
-  timestamp the format extracts instead of the leading ISO match,
-  so non-leading-TS shapes (Apache combined, nginx default, RFC 5424
-  syslog) flow end-to-end through the long-running monitor loop.
-- ~~**Real `stdin` source.**~~ Done (Unreleased). `capture()` yields
-  from `sys.stdin` with `format` / `format_keys` support; intended for
-  one-shot pipes (`cat app.log | paperbark monitor --iterations 1`).
-- ~~**Real `wrangler` source.**~~ Done (Unreleased). Wraps
-  `wrangler tail <worker> --format=json` with a wall-clock window,
-  ISO-prefix injection, and `outcome → level` mapping; verified
-  end-to-end against live Cloudflare Workers.
-- Real implementations for the remaining two stub sources
-  (`kubectl`, `cloudwatch`). The `file`, `stdin`, and `wrangler`
-  sources landed Unreleased.
+Near-term, in roughly the order they're likely to land:
+
+- Real `kubectl` source (wraps `kubectl logs` with namespace/container
+  selection).
+- Real `cloudwatch` source (AWS SDK `filter_log_events` against one
+  log group per `[[sources]]`).
 - Per-source probe overrides (today probe toggles and
   `[probes.patterns]` are global).
+- Custom inline `RegexFormat` definitions in TOML (today only the
+  bundled presets are selectable via `format = "<preset>"`).
 
 ## Beyond v1 (parking lot)
 
 - External plugin loader for third-party `Source` and `Format` modules.
 - Cross-run search and aggregation queries.
 - Optional alert sinks (Slack, PagerDuty).
-- Homebrew formula and PyPI release automation.
+- Homebrew formula.
 
 ## Naming and registries
 
-| Surface  | Name                     | Status                       |
-| -------- | ------------------------ | ---------------------------- |
-| GitHub   | `Good-Native/paperbark`  | created, public              |
-| npm      | `@good-native/paperbark` | scope reserved, package free |
-| PyPI     | `paperbark`              | free, not yet reserved       |
-| Homebrew | `paperbark`              | free, not yet reserved       |
-
-Reserve PyPI before the first release; reserve Homebrew when a formula
-is ready.
+- **GitHub:** `Good-Native/paperbark` (public).
+- **PyPI:** `paperbark` (published; auto-release on merge to `main`
+  with a fresh `[Unreleased]` changelog entry).
+- **npm:** `@good-native/paperbark` scope reserved; package free for
+  any future companion package.
+- **Homebrew:** `paperbark` free; reserve when a formula is ready.
