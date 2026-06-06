@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Add unreleased changes here._
+### Fixed
+
+- Log sources now resolve their CLI executable via `shutil.which` before
+  spawning, so `paperbark monitor` finds tools installed as Windows
+  `.cmd`/`.bat` shims. Previously, a `wrangler` source on Windows died with
+  `FileNotFoundError: [WinError 2]` because `subprocess.Popen(shell=False)`
+  routes through `CreateProcess`, which does not consult `PATHEXT` for a
+  bare `wrangler` (npm installs it as `wrangler.cmd`, with no `.exe`). The
+  `flyctl` source shared the same latent fragility. A genuinely missing
+  tool still raises the same `FileNotFoundError` as before.
 
 ## Full changelog history
 

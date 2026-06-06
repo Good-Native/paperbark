@@ -411,3 +411,55 @@ def test_wrangler_default_runner_terminates_idle_stream_within_window() -> None:
     elapsed = _time.monotonic() - started
     assert events == []
     assert elapsed < 6.0
+
+
+# --- executable resolution (Windows PATHEXT fix) ---------------------------
+
+
+def test_resolve_executable_resolves_first_arg(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``command[0]`` is replaced with the full path ``shutil.which`` finds.
+
+    On Windows this is how the npm-installed ``wrangler.cmd`` shim gets
+    located — ``subprocess.Popen(shell=False)`` routes through CreateProcess,
+    which doesn't consult PATHEXT for a bare ``wrangler``.
+    """
+    import shutil
+
+    from paperbark.sources._exec import resolve_executable
+
+    # Patch the stdlib ``shutil.which`` the helper calls; ``_exec`` does
+    # ``import shutil`` so it sees the same module object.
+    monkeypatch.setattr(
+        shutil,
+        "which",
+        lambda name: r"C:\Users\u\AppData\Roaming\npm\wrangler.cmd",
+    )
+    resolved = resolve_executable(["wrangler", "tail", "w", "--format=json"])
+    assert resolved == [
+        r"C:\Users\u\AppData\Roaming\npm\wrangler.cmd",
+        "tail",
+        "w",
+        "--format=json",
+    ]
+
+
+def test_resolve_executable_unchanged_when_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing tool leaves the command intact so the caller still raises the
+    same ``FileNotFoundError`` it did before — no silent behaviour change."""
+    import shutil
+
+    from paperbark.sources._exec import resolve_executable
+
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
+    command = ["wrangler", "tail", "w"]
+    assert resolve_executable(command) == command
+
+
+def test_resolve_executable_handles_empty_command() -> None:
+    from paperbark.sources._exec import resolve_executable
+
+    assert resolve_executable([]) == []
