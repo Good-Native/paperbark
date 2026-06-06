@@ -20,6 +20,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Full changelog history
 
+## [0.1.11] - 2026-06-06
+
+### Security
+
+- Bump dev-chain dependencies to close advisories surfaced by
+  `pip-audit`: `urllib3` 2.6.3 → 2.7.0 (CVE-2026-44432 decompression
+  DoS, CVE-2026-44431 cross-origin header leak), `idna` 3.13 → 3.18
+  (CVE-2026-45409 `idna.encode` ReDoS), and `pip` 26.1 → 26.1.2
+  (CVE-2026-8643 install-time `console_scripts` path escape). All
+  four sit in the dev/CI chain only — paperbark's runtime dependency
+  is still just `rich`. A `pip>=26.1.2` floor is now declared in the
+  `dev` extras so local and CI environments stay aligned.
+
+## [0.1.10] - 2026-06-06
+
+### Added
+
+- `paperbark monitor` accepts a repeatable `--source NAME` flag that
+  scopes the run to a subset of configured `[[sources]]` entries by
+  name (e.g. `--source staging --source prod`). Mirrored as
+  `[monitor].only = ["staging", "prod"]` in TOML; CLI overrides TOML.
+  An unknown name is a hard error that lists the configured sources.
+  Empty / absent preserves the prior "capture from every source"
+  behaviour bit-for-bit. Saves commenting out `[[sources]]` blocks
+  when only one tenant needs a quick run.
+
 ## [0.1.9] - 2026-05-10
 
 ### Added
