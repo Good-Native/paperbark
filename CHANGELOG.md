@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Add unreleased changes here._
+
+## Full changelog history
+
+## [0.1.11] - 2026-06-06
+
 ### Security
 
 - Bump dev-chain dependencies to close advisories surfaced by
@@ -17,8 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   four sit in the dev/CI chain only — paperbark's runtime dependency
   is still just `rich`. A `pip>=26.1.2` floor is now declared in the
   `dev` extras so local and CI environments stay aligned.
-
-## Full changelog history
 
 ## [0.1.10] - 2026-06-06
 
