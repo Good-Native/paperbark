@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Add unreleased changes here._
+
+## Full changelog history
+
+## [0.1.10] - 2026-06-06
+
 ### Added
 
 - `paperbark monitor` accepts a repeatable `--source NAME` flag that
@@ -17,8 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Empty / absent preserves the prior "capture from every source"
   behaviour bit-for-bit. Saves commenting out `[[sources]]` blocks
   when only one tenant needs a quick run.
-
-## Full changelog history
 
 ## [0.1.9] - 2026-05-10
 
