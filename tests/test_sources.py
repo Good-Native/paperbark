@@ -425,14 +425,18 @@ def test_resolve_executable_resolves_first_arg(
     located — ``subprocess.Popen(shell=False)`` routes through CreateProcess,
     which doesn't consult PATHEXT for a bare ``wrangler``.
     """
-    from paperbark.sources import _exec
+    import shutil
 
+    from paperbark.sources._exec import resolve_executable
+
+    # Patch the stdlib ``shutil.which`` the helper calls; ``_exec`` does
+    # ``import shutil`` so it sees the same module object.
     monkeypatch.setattr(
-        _exec.shutil,
+        shutil,
         "which",
         lambda name: r"C:\Users\u\AppData\Roaming\npm\wrangler.cmd",
     )
-    resolved = _exec.resolve_executable(["wrangler", "tail", "w", "--format=json"])
+    resolved = resolve_executable(["wrangler", "tail", "w", "--format=json"])
     assert resolved == [
         r"C:\Users\u\AppData\Roaming\npm\wrangler.cmd",
         "tail",
@@ -446,11 +450,13 @@ def test_resolve_executable_unchanged_when_not_found(
 ) -> None:
     """A missing tool leaves the command intact so the caller still raises the
     same ``FileNotFoundError`` it did before — no silent behaviour change."""
-    from paperbark.sources import _exec
+    import shutil
 
-    monkeypatch.setattr(_exec.shutil, "which", lambda _name: None)
+    from paperbark.sources._exec import resolve_executable
+
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
     command = ["wrangler", "tail", "w"]
-    assert _exec.resolve_executable(command) == command
+    assert resolve_executable(command) == command
 
 
 def test_resolve_executable_handles_empty_command() -> None:
