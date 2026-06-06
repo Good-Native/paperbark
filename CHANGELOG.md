@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Add unreleased changes here._
+
+## Full changelog history
+
+## [0.1.12] - 2026-06-06
+
 ### Fixed
 
 - Log sources now resolve their CLI executable via `shutil.which` before
@@ -17,8 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bare `wrangler` (npm installs it as `wrangler.cmd`, with no `.exe`). The
   `flyctl` source shared the same latent fragility. A genuinely missing
   tool still raises the same `FileNotFoundError` as before.
-
-## Full changelog history
 
 ## [0.1.11] - 2026-06-06
 
