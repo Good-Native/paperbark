@@ -239,6 +239,11 @@ class MonitorConfig:
     cleanup_enabled: bool = True
     cleanup_days: int = DEFAULT_CLEANUP_DAYS
     cleanup_mode: str = DEFAULT_CLEANUP_MODE
+    # Subset of ``[[sources]]`` entries (by ``name``) to capture this run.
+    # Empty tuple means "no scoping" — every configured source runs, same
+    # as before the flag existed. Unknown names raise at dispatch time so
+    # TOML and CLI paths fail identically.
+    only: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -454,6 +459,10 @@ def _parse_monitor(raw: Any) -> MonitorConfig:
     if cleanup_mode_raw not in CLEANUP_MODES:
         joined = ", ".join(repr(m) for m in CLEANUP_MODES)
         raise ConfigError(f"[monitor].cleanup_mode must be one of {joined}")
+    only = _parse_string_list(table.get("only"), "[monitor].only")
+    for name in only:
+        if not name:
+            raise ConfigError("[monitor].only entries must be non-empty strings")
     return MonitorConfig(
         interval=interval,
         iterations=iterations_raw,
@@ -462,6 +471,7 @@ def _parse_monitor(raw: Any) -> MonitorConfig:
         cleanup_enabled=cleanup_enabled,
         cleanup_days=cleanup_days_raw,
         cleanup_mode=cleanup_mode_raw,
+        only=only,
     )
 
 
